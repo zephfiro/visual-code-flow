@@ -5,12 +5,7 @@
     "outDir": "dist",
     "module": "CommonJS",
     "moduleResolution": "Node",
-    "types": [
-      "node",
-      "vscode"
-    ]
+    "types": ["node", "vscode"]
   },
-  "include": [
-    "src/**/*.ts"
-  ]
+  "include": ["src/**/*.ts"]
 }
