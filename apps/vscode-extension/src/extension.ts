@@ -11,7 +11,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     await vscode.window.showInformationMessage(
-      'Visual Code Flow is ready. Function discovery and graph rendering are coming next.',
+      'Visual Code Flow is ready. Function discovery and graph rendering are coming next.'
     );
   });
 
