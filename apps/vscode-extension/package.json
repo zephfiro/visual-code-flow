@@ -6,6 +6,6 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node --test dist/**/*.test.js"
+    "test": "node --test"
   }
 }
