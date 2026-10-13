@@ -89,17 +89,23 @@ function FlowApp() {
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | undefined>();
   const bridge = useMemo(() => acquireVsCodeApi(), []);
   const view = useMemo(() => (graph ? layoutGraph(graph) : undefined), [graph]);
-  const highlightedNodes = useMemo(() => view?.nodes.map((node) => ({
-    ...node,
-    selected: node.id === highlightedNodeId
-  })), [view, highlightedNodeId]);
+  const highlightedNodes = useMemo(
+    () =>
+      view?.nodes.map((node) => ({
+        ...node,
+        selected: node.id === highlightedNodeId
+      })),
+    [view, highlightedNodeId]
+  );
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const data: unknown = event.data;
       if (typeof data !== 'object' || data === null || !('type' in data)) return;
       if (data.type === 'node:highlight') {
-        setHighlightedNodeId('nodeId' in data && typeof data.nodeId === 'string' ? data.nodeId : undefined);
+        setHighlightedNodeId(
+          'nodeId' in data && typeof data.nodeId === 'string' ? data.nodeId : undefined
+        );
       }
       if (data.type === 'status' && 'message' in data && typeof data.message === 'string') {
         setStatus(data.message);
