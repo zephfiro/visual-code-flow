@@ -102,6 +102,9 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
     if (!functionNode?.body)
       return { function: symbol, statements, diagnostics: ['Function no longer exists'] };
 
+    const toStatements = (node: ts.Statement): readonly StatementDescriptor[] =>
+      ts.isBlock(node) ? node.statements.map(toStatement) : [toStatement(node)];
+
     const toStatement = (node: ts.Node): StatementDescriptor => {
       let kind: StatementKind = 'sequence';
       if (ts.isIfStatement(node)) kind = 'branch';
@@ -120,11 +123,31 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
       else if (ts.isExpressionStatement(node) && ts.isCallExpression(node.expression))
         kind = 'call';
       else if (ts.isSwitchStatement(node) || ts.isTryStatement(node)) kind = 'unsupported';
+
+      const children = ts.isIfStatement(node)
+        ? toStatements(node.thenStatement)
+        : ts.isForStatement(node) ||
+            ts.isForOfStatement(node) ||
+            ts.isForInStatement(node) ||
+            ts.isWhileStatement(node) ||
+            ts.isDoStatement(node)
+          ? toStatements(node.statement)
+          : undefined;
+      const alternate =
+        ts.isIfStatement(node) && node.elseStatement
+          ? toStatements(node.elseStatement)
+          : undefined;
+
       return {
         id: `${request.uri}:${node.getStart(file)}`,
         kind,
-        label: node.getText(file).slice(0, 160),
-        location: span(file, request.uri, node)
+        label:
+          ts.isIfStatement(node) || ts.isWhileStatement(node) || ts.isDoStatement(node)
+            ? node.expression.getText(file).slice(0, 160)
+            : node.getText(file).slice(0, 160),
+        location: span(file, request.uri, node),
+        ...(children ? { children } : {}),
+        ...(alternate ? { alternate } : {})
       };
     };
 
@@ -134,7 +157,12 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
         statements.push(toStatement(statement));
       }
     } else {
-      statements.push(toStatement(functionNode.body));
+      statements.push({
+        id: `${request.uri}:${functionNode.body.getStart(file)}`,
+        kind: 'return',
+        label: functionNode.body.getText(file).slice(0, 160),
+        location: span(file, request.uri, functionNode.body)
+      });
     }
     return { function: symbol, statements, diagnostics: [] };
   }
