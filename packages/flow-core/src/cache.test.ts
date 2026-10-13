@@ -4,7 +4,13 @@ import { AnalysisGeneration, GraphAnalysisCache } from './cache.js';
 import { FLOW_SCHEMA_VERSION, type FlowGraph } from './model.js';
 
 function graph(rootSymbolId: string): FlowGraph {
-  return { schemaVersion: FLOW_SCHEMA_VERSION, rootSymbolId, nodes: [], edges: [], diagnostics: [] };
+  return {
+    schemaVersion: FLOW_SCHEMA_VERSION,
+    rootSymbolId,
+    nodes: [],
+    edges: [],
+    diagnostics: []
+  };
 }
 
 test('uses version and symbol as part of the cache key', () => {
