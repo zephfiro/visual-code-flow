@@ -1,12 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { FLOW_SCHEMA_VERSION, type FlowGraph } from './model.js';
-import {
-  assertValidFlowGraph,
-  FlowValidationError,
-  serializeFlowGraph,
-  validateFlowGraph
-} from './validation.js';
+import { assertValidFlowGraph, FlowValidationError, serializeFlowGraph, validateFlowGraph } from './validation.js';
 
 const validGraph = (): FlowGraph => ({
   schemaVersion: FLOW_SCHEMA_VERSION,
