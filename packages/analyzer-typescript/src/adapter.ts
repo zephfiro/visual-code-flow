@@ -134,9 +134,7 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
           ? toStatements(node.statement)
           : undefined;
       const alternate =
-        ts.isIfStatement(node) && node.elseStatement
-          ? toStatements(node.elseStatement)
-          : undefined;
+        ts.isIfStatement(node) && node.elseStatement ? toStatements(node.elseStatement) : undefined;
 
       return {
         id: `${request.uri}:${node.getStart(file)}`,
