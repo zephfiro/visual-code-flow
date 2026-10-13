@@ -45,6 +45,10 @@ export function isGraphViewMessage(data: unknown): data is GraphViewMessage {
   if (typeof data !== 'object' || data === null) return false;
   const candidate = data as Record<string, unknown>;
   if (candidate.type === 'ready') return candidate.nodeId === undefined;
-  return candidate.type === 'node:selected' && typeof candidate.nodeId === 'string'
-    && candidate.nodeId.length > 0 && candidate.nodeId.length <= 256;
+  return (
+    candidate.type === 'node:selected' &&
+    typeof candidate.nodeId === 'string' &&
+    candidate.nodeId.length > 0 &&
+    candidate.nodeId.length <= 256
+  );
 }
