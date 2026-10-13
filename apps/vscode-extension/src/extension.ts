@@ -121,7 +121,10 @@ export function activate(context: vscode.ExtensionContext): void {
             void panel?.webview.postMessage({ type: 'status', message: currentStatus });
             if (currentGraph)
               void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
-            void panel?.webview.postMessage({ type: 'node:highlight', nodeId: selectedGraphNodeId });
+            void panel?.webview.postMessage({
+              type: 'node:highlight',
+              nodeId: selectedGraphNodeId
+            });
           }
         },
         null,
