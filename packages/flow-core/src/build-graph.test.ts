@@ -46,7 +46,10 @@ test('returns terminate branches instead of falling into subsequent statements',
     statement('next', 'return')
   ]);
   const outgoing = (source: string) => graph.edges.filter((edge) => edge.source === source);
-  assert.deepEqual(outgoing('early').map((edge) => edge.target), ['test:exit']);
+  assert.deepEqual(
+    outgoing('early').map((edge) => edge.target),
+    ['test:exit']
+  );
   assert.ok(!outgoing('early').some((edge) => edge.target === 'next'));
   assert.ok(graph.edges.some((edge) => edge.source === 'if' && edge.kind === 'false'));
 });
