@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { TypeScriptLanguageAdapter } from '@visual-code-flow/analyzer-typescript';
-import { buildControlFlowGraph, type FlowGraph } from '@visual-code-flow/flow-core';
+import { buildControlFlowGraph, SourceMapIndex, type FlowGraph } from '@visual-code-flow/flow-core';
 import { createGraphWebview, isGraphViewMessage } from './webview.js';
 
 export const OPEN_FLOW_COMMAND = 'visualCodeFlow.openFlow';
@@ -11,6 +11,9 @@ export function activate(context: vscode.ExtensionContext): void {
   let panel: vscode.WebviewPanel | undefined;
   let currentStatus = 'Select a function to view its flow.';
   let currentGraph: FlowGraph | undefined;
+  let currentSourceMap: SourceMapIndex | undefined;
+  let sourceEditorColumn: vscode.ViewColumn = vscode.ViewColumn.One;
+  let activeDecoration: vscode.TextEditorDecorationType | undefined;
 
   const openFlow = vscode.commands.registerCommand(OPEN_FLOW_COMMAND, async () => {
     const editor = vscode.window.activeTextEditor;
@@ -19,6 +22,7 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
+    sourceEditorColumn = editor.viewColumn ?? vscode.ViewColumn.One;
     const document = editor.document;
     if (!adapter.supportedLanguages.includes(document.languageId)) {
       await vscode.window.showWarningMessage(
@@ -57,6 +61,7 @@ export function activate(context: vscode.ExtensionContext): void {
         selected
       );
       currentGraph = buildControlFlowGraph(analysis);
+      currentSourceMap = new SourceMapIndex(currentGraph);
     } catch (error) {
       const details = error instanceof Error ? error.message : String(error);
       await vscode.window.showErrorMessage(`Visual Code Flow: ${details}`);
@@ -74,6 +79,41 @@ export function activate(context: vscode.ExtensionContext): void {
       panel.webview.onDidReceiveMessage(
         (message: unknown) => {
           if (!isGraphViewMessage(message)) return;
+          if (message.type === 'node:selected') {
+            const location = currentSourceMap?.getSource(message.nodeId!);
+            if (!location) return;
+            void (async () => {
+              try {
+                const document = await vscode.workspace.openTextDocument(
+                  vscode.Uri.parse(location.uri)
+                );
+                const editor = await vscode.window.showTextDocument(document, {
+                  viewColumn: sourceEditorColumn,
+                  preserveFocus: false,
+                  preview: false
+                });
+                const range = new vscode.Range(
+                  location.start.line,
+                  location.start.character,
+                  location.end.line,
+                  location.end.character
+                );
+                editor.selection = new vscode.Selection(range.start, range.end);
+                editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+                activeDecoration?.dispose();
+                activeDecoration = vscode.window.createTextEditorDecorationType({
+                  backgroundColor: new vscode.ThemeColor('editor.selectionHighlightBackground'),
+                  isWholeLine: false
+                });
+                editor.setDecorations(activeDecoration, [range]);
+              } catch (error) {
+                const details = error instanceof Error ? error.message : String(error);
+                void vscode.window.showErrorMessage(
+                  `Visual Code Flow navigation failed: ${details}`
+                );
+              }
+            })();
+          }
           if (message.type === 'ready') {
             void panel?.webview.postMessage({ type: 'status', message: currentStatus });
             if (currentGraph)
@@ -90,7 +130,12 @@ export function activate(context: vscode.ExtensionContext): void {
     await panel.webview.postMessage({ type: 'graph', graph: currentGraph });
   });
 
-  context.subscriptions.push(openFlow, { dispose: () => panel?.dispose() });
+  context.subscriptions.push(openFlow, {
+    dispose: () => {
+      activeDecoration?.dispose();
+      panel?.dispose();
+    }
+  });
 }
 
 export function deactivate(): void {
