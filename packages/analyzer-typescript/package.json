@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "npm run build && node --test dist/adapter.test.js"
+    "test": "npm run build && node --test dist/*.test.js"
   },
   "dependencies": {
     "@visual-code-flow/shared": "0.0.0",
