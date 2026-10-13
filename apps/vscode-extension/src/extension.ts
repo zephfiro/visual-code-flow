@@ -14,6 +14,7 @@ export function activate(context: vscode.ExtensionContext): void {
   let currentSourceMap: SourceMapIndex | undefined;
   let sourceEditorColumn: vscode.ViewColumn = vscode.ViewColumn.One;
   let activeDecoration: vscode.TextEditorDecorationType | undefined;
+  let selectedGraphNodeId: string | undefined;
 
   const openFlow = vscode.commands.registerCommand(OPEN_FLOW_COMMAND, async () => {
     const editor = vscode.window.activeTextEditor;
@@ -62,6 +63,7 @@ export function activate(context: vscode.ExtensionContext): void {
       );
       currentGraph = buildControlFlowGraph(analysis);
       currentSourceMap = new SourceMapIndex(currentGraph);
+      selectedGraphNodeId = undefined;
     } catch (error) {
       const details = error instanceof Error ? error.message : String(error);
       await vscode.window.showErrorMessage(`Visual Code Flow: ${details}`);
@@ -80,6 +82,7 @@ export function activate(context: vscode.ExtensionContext): void {
         (message: unknown) => {
           if (!isGraphViewMessage(message)) return;
           if (message.type === 'node:selected') {
+            selectedGraphNodeId = message.nodeId;
             const location = currentSourceMap?.getSource(message.nodeId!);
             if (!location) return;
             void (async () => {
@@ -118,6 +121,10 @@ export function activate(context: vscode.ExtensionContext): void {
             void panel?.webview.postMessage({ type: 'status', message: currentStatus });
             if (currentGraph)
               void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
+            void panel?.webview.postMessage({
+              type: 'node:highlight',
+              nodeId: selectedGraphNodeId
+            });
           }
         },
         null,
@@ -130,7 +137,18 @@ export function activate(context: vscode.ExtensionContext): void {
     await panel.webview.postMessage({ type: 'graph', graph: currentGraph });
   });
 
-  context.subscriptions.push(openFlow, {
+  const selectionListener = vscode.window.onDidChangeTextEditorSelection((event) => {
+    if (!panel || !currentSourceMap) return;
+    const node = currentSourceMap.findNode(event.textEditor.document.uri.toString(), {
+      line: event.selections[0]?.active.line ?? 0,
+      character: event.selections[0]?.active.character ?? 0
+    });
+    if (node?.id === selectedGraphNodeId) return;
+    selectedGraphNodeId = node?.id;
+    void panel.webview.postMessage({ type: 'node:highlight', nodeId: selectedGraphNodeId });
+  });
+
+  context.subscriptions.push(selectionListener, openFlow, {
     dispose: () => {
       activeDecoration?.dispose();
       panel?.dispose();
