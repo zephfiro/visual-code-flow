@@ -8,9 +8,9 @@ function contains(node: FlowNode, uri: string, position: SourcePosition): boolea
   const source = node.source;
   return Boolean(
     source &&
-      source.uri === uri &&
-      compare(source.start, position) <= 0 &&
-      compare(position, source.end) < 0
+    source.uri === uri &&
+    compare(source.start, position) <= 0 &&
+    compare(position, source.end) < 0
   );
 }
 
