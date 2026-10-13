@@ -46,13 +46,23 @@ export function activate(context: vscode.ExtensionContext): void {
     currentStatus = `Selected function: ${selected.name} (line ${selected.location.start.line + 1})`;
     if (!panel) {
       panel = createGraphWebview(context);
-      panel.onDidDispose(() => { panel = undefined; }, null, context.subscriptions);
-      panel.webview.onDidReceiveMessage((message: unknown) => {
-        if (!isGraphViewMessage(message)) return;
-        if (message.type === 'ready') {
-          void panel?.webview.postMessage({ type: 'status', message: currentStatus });
-        }
-      }, null, context.subscriptions);
+      panel.onDidDispose(
+        () => {
+          panel = undefined;
+        },
+        null,
+        context.subscriptions
+      );
+      panel.webview.onDidReceiveMessage(
+        (message: unknown) => {
+          if (!isGraphViewMessage(message)) return;
+          if (message.type === 'ready') {
+            void panel?.webview.postMessage({ type: 'status', message: currentStatus });
+          }
+        },
+        null,
+        context.subscriptions
+      );
     } else {
       panel.reveal(vscode.ViewColumn.Beside, true);
     }
