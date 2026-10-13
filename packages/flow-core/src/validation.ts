@@ -13,10 +13,7 @@ function validateLocation(location: SourceLocation, at: string, errors: string[]
   const values = [start.line, start.character, end.line, end.character];
   if (values.some((value) => !Number.isSafeInteger(value) || value < 0)) {
     errors.push(`${at}: source positions must be nonnegative safe integers`);
-  } else if (
-    end.line < start.line ||
-    (end.line === start.line && end.character < start.character)
-  ) {
+  } else if (end.line < start.line || (end.line === start.line && end.character < start.character)) {
     errors.push(`${at}: end must not precede start`);
   }
 }
