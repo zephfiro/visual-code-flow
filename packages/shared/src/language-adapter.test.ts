@@ -6,7 +6,7 @@ const request: AnalysisRequest = {
   uri: 'file:///example.ts',
   text: 'function calc() {}',
   languageId: 'typescript',
-  documentVersion: 1,
+  documentVersion: 1
 };
 
 test('adapters can be implemented without importing the VS Code API', async () => {
@@ -19,18 +19,18 @@ test('adapters can be implemented without importing the VS Code API', async () =
     resolveCall: async (_request, callSite) => ({
       callSite,
       targets: [],
-      reason: 'not-found',
-    }),
+      reason: 'not-found'
+    })
   };
   assert.equal(adapter.findFunction(request, { line: 0, character: 2 }), undefined);
   const span = {
     uri: request.uri,
     start: { line: 0, character: 0 },
-    end: { line: 0, character: 4 },
+    end: { line: 0, character: 4 }
   };
   assert.deepEqual(await adapter.resolveCall(request, span), {
     callSite: span,
     targets: [],
-    reason: 'not-found',
+    reason: 'not-found'
   });
 });
