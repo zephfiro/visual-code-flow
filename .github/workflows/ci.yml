@@ -14,5 +14,4 @@ jobs:
           node-version: '22'
       - run: npm install --no-audit --no-fund
       - run: npm run check
-      - run: |
-          npm run format:check || { npx prettier --write packages/analyzer-typescript/src/adapter.ts; git diff -- packages/analyzer-typescript/src/adapter.ts; exit 1; }
+      - run: npm run format:check
