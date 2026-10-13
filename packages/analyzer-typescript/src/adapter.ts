@@ -9,13 +9,18 @@ import type {
   SourceSpan,
   StatementDescriptor,
   StatementKind,
-  TextPosition,
+  TextPosition
 } from '@visual-code-flow/shared';
 
 function sourceFile(request: AnalysisRequest): ts.SourceFile {
-  const kind = request.languageId === 'javascript' ? ts.ScriptKind.JS
-    : request.languageId === 'javascriptreact' ? ts.ScriptKind.JSX
-      : request.languageId === 'typescriptreact' ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const kind =
+    request.languageId === 'javascript'
+      ? ts.ScriptKind.JS
+      : request.languageId === 'javascriptreact'
+        ? ts.ScriptKind.JSX
+        : request.languageId === 'typescriptreact'
+          ? ts.ScriptKind.TSX
+          : ts.ScriptKind.TS;
   return ts.createSourceFile(request.uri, request.text, ts.ScriptTarget.Latest, true, kind);
 }
 
@@ -31,10 +36,15 @@ function contains(file: ts.SourceFile, node: ts.Node, position: TextPosition): b
 }
 
 function isFunction(node: ts.Node): node is ts.FunctionLikeDeclaration {
-  return ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)
-    || ts.isFunctionExpression(node) || ts.isArrowFunction(node)
-    || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node)
-    || ts.isConstructorDeclaration(node);
+  return (
+    ts.isFunctionDeclaration(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isArrowFunction(node) ||
+    ts.isGetAccessorDeclaration(node) ||
+    ts.isSetAccessorDeclaration(node) ||
+    ts.isConstructorDeclaration(node)
+  );
 }
 
 function nameOf(node: ts.FunctionLikeDeclaration): string {
@@ -65,19 +75,20 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
       name: nameOf(selected),
       location: span(file, request.uri, selected),
       body: span(file, request.uri, selected.body),
-      languageId: request.languageId,
+      languageId: request.languageId
     };
   }
 
   async analyzeFunction(
     request: AnalysisRequest,
     symbol: FunctionDescriptor,
-    cancellation?: Cancellation,
+    cancellation?: Cancellation
   ): Promise<AnalysisResult> {
     const file = sourceFile(request);
     const statements: StatementDescriptor[] = [];
     const position = file.getPositionOfLineAndCharacter(
-      symbol.location.start.line, symbol.location.start.character,
+      symbol.location.start.line,
+      symbol.location.start.character
     );
     let functionNode: ts.FunctionLikeDeclaration | undefined;
     function visit(node: ts.Node): void {
@@ -88,25 +99,32 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
       ts.forEachChild(node, visit);
     }
     visit(file);
-    if (!functionNode?.body) return { function: symbol, statements, diagnostics: ['Function no longer exists'] };
+    if (!functionNode?.body)
+      return { function: symbol, statements, diagnostics: ['Function no longer exists'] };
 
     const toStatement = (node: ts.Node): StatementDescriptor => {
       let kind: StatementKind = 'sequence';
       if (ts.isIfStatement(node)) kind = 'branch';
-      else if (ts.isForStatement(node) || ts.isForOfStatement(node)
-        || ts.isForInStatement(node) || ts.isWhileStatement(node)
-        || ts.isDoStatement(node)) kind = 'loop';
+      else if (
+        ts.isForStatement(node) ||
+        ts.isForOfStatement(node) ||
+        ts.isForInStatement(node) ||
+        ts.isWhileStatement(node) ||
+        ts.isDoStatement(node)
+      )
+        kind = 'loop';
       else if (ts.isReturnStatement(node)) kind = 'return';
       else if (ts.isThrowStatement(node)) kind = 'throw';
       else if (ts.isBreakStatement(node)) kind = 'break';
       else if (ts.isContinueStatement(node)) kind = 'continue';
-      else if (ts.isExpressionStatement(node) && ts.isCallExpression(node.expression)) kind = 'call';
+      else if (ts.isExpressionStatement(node) && ts.isCallExpression(node.expression))
+        kind = 'call';
       else if (ts.isSwitchStatement(node) || ts.isTryStatement(node)) kind = 'unsupported';
       return {
         id: `${request.uri}:${node.getStart(file)}`,
         kind,
         label: node.getText(file).slice(0, 160),
-        location: span(file, request.uri, node),
+        location: span(file, request.uri, node)
       };
     };
 
