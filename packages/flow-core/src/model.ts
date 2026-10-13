@@ -13,13 +13,7 @@ export type FlowNodeKind =
   | 'unsupported';
 
 export type FlowEdgeKind =
-  | 'normal'
-  | 'true'
-  | 'false'
-  | 'loop-back'
-  | 'break'
-  | 'continue'
-  | 'exception';
+  'normal' | 'true' | 'false' | 'loop-back' | 'break' | 'continue' | 'exception';
 
 export interface SourcePosition {
   readonly line: number;
