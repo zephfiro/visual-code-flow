@@ -18,6 +18,9 @@ export function createGraphWebview(context: vscode.ExtensionContext): vscode.Web
   const scriptUri = panel.webview.asWebviewUri(
     vscode.Uri.joinPath(context.extensionUri, 'media', 'webview.js')
   );
+  const styleUri = panel.webview.asWebviewUri(
+    vscode.Uri.joinPath(context.extensionUri, 'media', 'webview.css')
+  );
   const csp = [
     "default-src 'none'",
     `img-src ${panel.webview.cspSource} data:`,
@@ -32,6 +35,8 @@ export function createGraphWebview(context: vscode.ExtensionContext): vscode.Web
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Visual Code Flow</title>
+  <link rel="stylesheet" href="${styleUri}" />
+  <style>html, body, #app { margin: 0; width: 100%; height: 100%; overflow: hidden; }</style>
 </head>
 <body>
   <main id="app"></main>
