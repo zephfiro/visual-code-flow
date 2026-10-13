@@ -76,7 +76,8 @@ export function activate(context: vscode.ExtensionContext): void {
           if (!isGraphViewMessage(message)) return;
           if (message.type === 'ready') {
             void panel?.webview.postMessage({ type: 'status', message: currentStatus });
-            if (currentGraph) void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
+            if (currentGraph)
+              void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
           }
         },
         null,
