@@ -71,11 +71,11 @@ export interface LanguageAdapter {
   analyzeFunction(
     request: AnalysisRequest,
     symbol: FunctionDescriptor,
-    cancellation?: Cancellation,
+    cancellation?: Cancellation
   ): Promise<AnalysisResult>;
   resolveCall(
     request: AnalysisRequest,
     callSite: SourceSpan,
-    cancellation?: Cancellation,
+    cancellation?: Cancellation
   ): Promise<CallResolution>;
 }
