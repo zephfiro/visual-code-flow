@@ -126,7 +126,9 @@ function FlowApp() {
         margin: 0
       }}
     >
-      <header style={{ padding: '10px 16px', borderBottom: '1px solid var(--vscode-panel-border)' }}>
+      <header
+        style={{ padding: '10px 16px', borderBottom: '1px solid var(--vscode-panel-border)' }}
+      >
         <strong>Visual Code Flow</strong>
         <p role="status" style={{ margin: '6px 0 0', fontSize: 12, opacity: 0.75 }}>
           {status}
