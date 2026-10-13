@@ -86,13 +86,21 @@ function layoutGraph(graph: FlowGraph): { nodes: Node[]; edges: Edge[] } {
 function FlowApp() {
   const [status, setStatus] = useState('Select a function to view its flow.');
   const [graph, setGraph] = useState<FlowGraph | undefined>();
+  const [highlightedNodeId, setHighlightedNodeId] = useState<string | undefined>();
   const bridge = useMemo(() => acquireVsCodeApi(), []);
   const view = useMemo(() => (graph ? layoutGraph(graph) : undefined), [graph]);
+  const highlightedNodes = useMemo(() => view?.nodes.map((node) => ({
+    ...node,
+    selected: node.id === highlightedNodeId
+  })), [view, highlightedNodeId]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const data: unknown = event.data;
       if (typeof data !== 'object' || data === null || !('type' in data)) return;
+      if (data.type === 'node:highlight') {
+        setHighlightedNodeId('nodeId' in data && typeof data.nodeId === 'string' ? data.nodeId : undefined);
+      }
       if (data.type === 'status' && 'message' in data && typeof data.message === 'string') {
         setStatus(data.message);
       }
@@ -137,7 +145,7 @@ function FlowApp() {
       <div style={{ flex: 1, minHeight: 0 }}>
         {view && view.nodes.length > 0 ? (
           <ReactFlow
-            nodes={view.nodes}
+            nodes={highlightedNodes ?? view.nodes}
             edges={view.edges}
             onNodeClick={onNodeClick}
             fitView
