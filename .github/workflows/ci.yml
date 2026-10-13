@@ -14,4 +14,10 @@ jobs:
           node-version: '22'
       - run: npm install --no-audit --no-fund
       - run: npm run check
+      - name: Formatting diagnostics (temporary)
+        run: |
+          echo '=== ADAPTER ==='
+          npx prettier packages/analyzer-typescript/src/adapter.ts
+          echo '=== TEST ==='
+          npx prettier packages/analyzer-typescript/src/adapter.test.ts
       - run: npm run format:check
