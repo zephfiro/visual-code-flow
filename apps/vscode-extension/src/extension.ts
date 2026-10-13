@@ -84,7 +84,9 @@ export function activate(context: vscode.ExtensionContext): void {
             if (!location) return;
             void (async () => {
               try {
-                const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(location.uri));
+                const document = await vscode.workspace.openTextDocument(
+                  vscode.Uri.parse(location.uri)
+                );
                 const editor = await vscode.window.showTextDocument(document, {
                   viewColumn: sourceEditorColumn,
                   preserveFocus: false,
@@ -106,7 +108,9 @@ export function activate(context: vscode.ExtensionContext): void {
                 editor.setDecorations(activeDecoration, [range]);
               } catch (error) {
                 const details = error instanceof Error ? error.message : String(error);
-                void vscode.window.showErrorMessage(`Visual Code Flow navigation failed: ${details}`);
+                void vscode.window.showErrorMessage(
+                  `Visual Code Flow navigation failed: ${details}`
+                );
               }
             })();
           }
