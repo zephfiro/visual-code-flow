@@ -14,4 +14,12 @@ jobs:
           node-version: '22'
       - run: npm install --no-audit --no-fund
       - run: npm run check
+      - name: Formatting diagnostics (temporary)
+        run: |
+          echo '=== HOST ==='
+          npx prettier apps/vscode-extension/src/webview.ts
+          echo '=== REACT ==='
+          npx prettier packages/renderer-react/src/app.tsx
+          echo '=== TSCONFIG ==='
+          npx prettier packages/renderer-react/tsconfig.json
       - run: npm run format:check
