@@ -1,11 +1,15 @@
 import * as vscode from 'vscode';
 import { TypeScriptLanguageAdapter } from '@visual-code-flow/analyzer-typescript';
+import { createGraphWebview, isGraphViewMessage } from './webview.js';
 
 export const OPEN_FLOW_COMMAND = 'visualCodeFlow.openFlow';
 
 const adapter = new TypeScriptLanguageAdapter();
 
 export function activate(context: vscode.ExtensionContext): void {
+  let panel: vscode.WebviewPanel | undefined;
+  let currentStatus = 'Select a function to view its flow.';
+
   const openFlow = vscode.commands.registerCommand(OPEN_FLOW_COMMAND, async () => {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
@@ -39,14 +43,25 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
-    await vscode.window.showInformationMessage(
-      `Selected function: ${selected.name} (line ${selected.location.start.line + 1})`
-    );
+    currentStatus = `Selected function: ${selected.name} (line ${selected.location.start.line + 1})`;
+    if (!panel) {
+      panel = createGraphWebview(context);
+      panel.onDidDispose(() => { panel = undefined; }, null, context.subscriptions);
+      panel.webview.onDidReceiveMessage((message: unknown) => {
+        if (!isGraphViewMessage(message)) return;
+        if (message.type === 'ready') {
+          void panel?.webview.postMessage({ type: 'status', message: currentStatus });
+        }
+      }, null, context.subscriptions);
+    } else {
+      panel.reveal(vscode.ViewColumn.Beside, true);
+    }
+    await panel.webview.postMessage({ type: 'status', message: currentStatus });
   });
 
-  context.subscriptions.push(openFlow);
+  context.subscriptions.push(openFlow, { dispose: () => panel?.dispose() });
 }
 
 export function deactivate(): void {
-  // Disposables are registered with ExtensionContext.
+  // ExtensionContext owns registered listeners and panels.
 }
