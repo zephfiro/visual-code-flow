@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { FLOW_SCHEMA_VERSION, type FlowGraph } from './model.js';
-import { assertValidFlowGraph, FlowValidationError, serializeFlowGraph, validateFlowGraph } from './validation.js';
+import {
+  assertValidFlowGraph,
+  FlowValidationError,
+  serializeFlowGraph,
+  validateFlowGraph,
+} from './validation.js';
 
 const validGraph = (): FlowGraph => ({
   schemaVersion: FLOW_SCHEMA_VERSION,
@@ -60,11 +65,17 @@ test('rejects invalid source positions', () => {
   const invalid: FlowGraph = {
     ...graph,
     nodes: [
-      { id: 'bad', kind: 'operation', label: 'Invalid', expandable: false, source: {
-        uri: 'file:///src/example.ts',
-        start: { line: 10, character: 2 },
-        end: { line: 9, character: 5 },
-      } },
+      {
+        id: 'bad',
+        kind: 'operation',
+        label: 'Invalid',
+        expandable: false,
+        source: {
+          uri: 'file:///src/example.ts',
+          start: { line: 10, character: 2 },
+          end: { line: 9, character: 5 },
+        },
+      },
     ],
     edges: [],
   };
