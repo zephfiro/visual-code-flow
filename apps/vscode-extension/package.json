@@ -2,7 +2,7 @@
   "name": "@visual-code-flow/extension",
   "version": "0.0.0",
   "private": true,
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -33,5 +33,8 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/vscode": "^1.96.0"
+  },
+  "dependencies": {
+    "@visual-code-flow/analyzer-typescript": "0.0.0"
   }
 }
