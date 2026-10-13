@@ -5,12 +5,7 @@
     "outDir": "dist",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "types": [
-      "node",
-      "vscode"
-    ]
+    "types": ["node", "vscode"]
   },
-  "include": [
-    "src/**/*.ts"
-  ]
+  "include": ["src/**/*.ts"]
 }
