@@ -28,7 +28,16 @@
         "title": "Open Flow",
         "category": "Visual Code Flow"
       }
-    ]
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "visualCodeFlow.openFlow",
+          "when": "editorLangId == typescript || editorLangId == javascript || editorLangId == typescriptreact || editorLangId == javascriptreact",
+          "group": "navigation@25"
+        }
+      ]
+    }
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
