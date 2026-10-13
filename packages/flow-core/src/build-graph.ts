@@ -1,8 +1,4 @@
-import type {
-  AnalysisResult,
-  SourceSpan,
-  StatementDescriptor
-} from '@visual-code-flow/shared';
+import type { AnalysisResult, SourceSpan, StatementDescriptor } from '@visual-code-flow/shared';
 import {
   FLOW_SCHEMA_VERSION,
   type FlowEdge,
@@ -120,7 +116,11 @@ export function buildControlFlowGraph(result: AnalysisResult): FlowGraph {
         connect([{ source: statement.id, kind: 'continue' }], loop.header);
         pending = [];
       } else if (statement.kind === 'branch') {
-        const yes = sequence(statement.children ?? [], [{ source: statement.id, kind: 'true' }], loop);
+        const yes = sequence(
+          statement.children ?? [],
+          [{ source: statement.id, kind: 'true' }],
+          loop
+        );
         const no = sequence(
           statement.alternate ?? [],
           [{ source: statement.id, kind: 'false' }],
