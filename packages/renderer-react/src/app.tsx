@@ -14,9 +14,14 @@ function FlowApp() {
     const bridge = acquireVsCodeApi();
     const onMessage = (event: MessageEvent) => {
       const data: unknown = event.data;
-      if (typeof data === 'object' && data !== null
-        && 'type' in data && data.type === 'status'
-        && 'message' in data && typeof data.message === 'string') {
+      if (
+        typeof data === 'object' &&
+        data !== null &&
+        'type' in data &&
+        data.type === 'status' &&
+        'message' in data &&
+        typeof data.message === 'string'
+      ) {
         setStatus(data.message);
       }
     };
