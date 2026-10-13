@@ -14,12 +14,4 @@ jobs:
           node-version: '22'
       - run: npm install --no-audit --no-fund
       - run: npm run check
-      - name: Formatting diagnostics (temporary)
-        run: |
-          echo '=== CONTRACT ==='
-          npx prettier packages/shared/src/language-adapter.ts
-          echo '=== TEST ==='
-          npx prettier packages/shared/src/language-adapter.test.ts
-          echo '=== INDEX ==='
-          npx prettier packages/shared/src/index.ts
       - run: npm run format:check
