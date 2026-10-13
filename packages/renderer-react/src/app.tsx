@@ -32,7 +32,7 @@ const colors: Record<string, string> = {
   operation: '#334155'
 };
 
-function nodeStyle(node: FlowNode): Node['style'] {
+function nodeStyle(node: FlowNode): NonNullable<Node['style']> {
   return {
     background: colors[node.kind] ?? '#334155',
     color: '#f8fafc',
