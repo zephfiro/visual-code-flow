@@ -9,5 +9,5 @@ export type {
   SourceSpan,
   StatementDescriptor,
   StatementKind,
-  TextPosition,
+  TextPosition
 } from './language-adapter.js';
