@@ -14,6 +14,4 @@ jobs:
           node-version: '22'
       - run: npm install --no-audit --no-fund
       - run: npm run check
-      - name: Formatting diagnostics (temporary)
-        run: npx prettier apps/vscode-extension/src/extension.ts
       - run: npm run format:check
