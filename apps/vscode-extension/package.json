@@ -37,6 +37,39 @@
           "group": "navigation@25"
         }
       ]
+    },
+    "configuration": {
+      "title": "Visual Code Flow",
+      "properties": {
+        "visualCodeFlow.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Regenerate the open flow when a related source document changes."
+        },
+        "visualCodeFlow.refreshDebounceMs": {
+          "type": "integer",
+          "default": 400,
+          "minimum": 100,
+          "maximum": 5000,
+          "description": "Delay after source edits before refreshing the graph, in milliseconds."
+        },
+        "visualCodeFlow.maxExpansionDepth": {
+          "type": "integer",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 5,
+          "description": "Maximum nested function expansion depth."
+        },
+        "visualCodeFlow.layoutDirection": {
+          "type": "string",
+          "enum": [
+            "TB",
+            "LR"
+          ],
+          "default": "TB",
+          "description": "Graph layout: top-to-bottom or left-to-right."
+        }
+      }
     }
   },
   "devDependencies": {

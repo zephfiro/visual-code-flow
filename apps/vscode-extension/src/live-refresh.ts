@@ -72,15 +72,23 @@ export class LiveFlowRefresh implements vscode.Disposable {
     }
   }
 
-  onDocumentChanged(event: vscode.TextDocumentChangeEvent): boolean {
+  onDocumentChanged(event: vscode.TextDocumentChangeEvent, autoRefresh = true): boolean {
     const uri = event.document.uri.toString();
     if (!this.root || !this.watchedUris.has(uri)) return false;
     if (uri === this.root.uri) {
       this.root.anchorOffset = translateAnchorOffset(this.root.anchorOffset, event.contentChanges);
     }
     this.cache.invalidateDocument(uri);
-    this.schedule();
+    if (autoRefresh) this.schedule();
+    else {
+      this.cancelPending();
+      this.status('Auto-refresh disabled; reopen the flow to update its source locations.');
+    }
     return true;
+  }
+
+  requestRefresh(): void {
+    if (this.root) this.schedule();
   }
 
   private schedule(): void {
