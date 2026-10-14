@@ -192,20 +192,21 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
     // Refuse syntactic resolution when a containing function can shadow the name.
     let ancestor: ts.Node | undefined = expression.parent;
     while (ancestor && !ts.isSourceFile(ancestor)) {
-      if (isFunction(ancestor)) {
-        if (ancestor.parameters.some((parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === name)) {
+      const functionScope = ancestor;
+      if (isFunction(functionScope)) {
+        if (functionScope.parameters.some((parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === name)) {
           return { callSite, targets: [], reason: 'ambiguous' };
         }
-        if (ancestor.body) {
+        if (functionScope.body) {
           let shadowed = false;
           const scan = (node: ts.Node): void => {
-            if (node !== ancestor!.body && isFunction(node)) return;
+            if (node !== functionScope.body && isFunction(node)) return;
             if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name) {
               shadowed = true;
             }
             ts.forEachChild(node, scan);
           };
-          scan(ancestor.body);
+          scan(functionScope.body);
           if (shadowed) return { callSite, targets: [], reason: 'ambiguous' };
         }
       }
