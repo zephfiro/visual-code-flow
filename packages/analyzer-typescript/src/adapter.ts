@@ -171,7 +171,10 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
     }
 
     const file = sourceFile(request);
-    const offset = file.getPositionOfLineAndCharacter(callSite.start.line, callSite.start.character);
+    const offset = file.getPositionOfLineAndCharacter(
+      callSite.start.line,
+      callSite.start.character
+    );
     let call: ts.CallExpression | undefined;
 
     const locate = (node: ts.Node): void => {
