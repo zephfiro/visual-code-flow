@@ -13,8 +13,8 @@ const contents = execFileSync('unzip', ['-Z', '-1', archive], {
   .split('\n');
 const required = [
   'extension/package.json',
-  'extension/README.md',
-  'extension/LICENSE',
+  'extension/readme.md',
+  'extension/LICENSE.txt',
   'extension/dist/extension.cjs',
   'extension/media/webview.js',
   'extension/media/webview.css'
