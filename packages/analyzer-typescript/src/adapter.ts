@@ -194,7 +194,14 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
       else if (ts.isThrowStatement(node)) kind = 'throw';
       else if (ts.isBreakStatement(node)) kind = 'break';
       else if (ts.isContinueStatement(node)) kind = 'continue';
-      else if (ts.isExpressionStatement(node) && ts.isCallExpression(node.expression))
+      else if (
+        (ts.isExpressionStatement(node) && ts.isCallExpression(node.expression)) ||
+        (ts.isVariableStatement(node) &&
+          node.declarationList.declarations.some(
+            (declaration) =>
+              declaration.initializer && ts.isCallExpression(declaration.initializer)
+          ))
+      )
         kind = 'call';
       else if (ts.isSwitchStatement(node) || ts.isTryStatement(node)) kind = 'unsupported';
 
