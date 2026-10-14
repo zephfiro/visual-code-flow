@@ -9,7 +9,8 @@
     "test": "node --test",
     "test:e2e": "node ./e2e/run.mjs",
     "vscode:prepublish": "npm run build --prefix ../..",
-    "package:vsix": "vsce package --no-dependencies --out artifacts/visual-code-flow-0.1.0.vsix"
+    "package:vsix": "vsce package --no-dependencies --out artifacts/visual-code-flow-0.1.0.vsix",
+    "test:install-vsix": "node ./e2e/install-vsix.mjs"
   },
   "displayName": "Visual Code Flow",
   "description": "Explore code control flow inside VS Code",
