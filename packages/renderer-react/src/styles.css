@@ -198,3 +198,12 @@ body,
     max-width: 40vw;
   }
 }
+
+.flow-action-secondary {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+
+.flow-action-secondary:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
