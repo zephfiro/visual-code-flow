@@ -56,6 +56,6 @@ export function isGraphViewMessage(data: unknown): data is GraphViewMessage {
       candidate.type === 'node:collapse') &&
     typeof candidate.nodeId === 'string' &&
     candidate.nodeId.length > 0 &&
-    candidate.nodeId.length <= 256
+    candidate.nodeId.length <= 4096
   );
 }
