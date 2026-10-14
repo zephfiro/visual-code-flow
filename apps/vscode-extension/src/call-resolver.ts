@@ -41,7 +41,10 @@ export async function resolveCalledFunction(
   if (location) {
     destination =
       'targetUri' in location
-        ? { uri: location.targetUri, position: (location.targetSelectionRange ?? location.targetRange).start }
+        ? {
+            uri: location.targetUri,
+            position: (location.targetSelectionRange ?? location.targetRange).start
+          }
         : { uri: location.uri, position: location.range.start };
   } else {
     const fallback = await adapter.resolveCall(request, source);
@@ -49,10 +52,7 @@ export async function resolveCalledFunction(
     const target = fallback.targets[0]!;
     destination = {
       uri: vscode.Uri.parse(target.definition.uri),
-      position: new vscode.Position(
-        target.definition.start.line,
-        target.definition.start.character
-      )
+      position: new vscode.Position(target.definition.start.line, target.definition.start.character)
     };
   }
 
