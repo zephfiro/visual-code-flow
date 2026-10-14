@@ -1,9 +1,6 @@
 import { performance } from 'node:perf_hooks';
 import { TypeScriptLanguageAdapter } from '../packages/analyzer-typescript/dist/index.js';
-import {
-  buildControlFlowGraph,
-  SourceMapIndex
-} from '../packages/flow-core/dist/index.js';
+import { buildControlFlowGraph, SourceMapIndex } from '../packages/flow-core/dist/index.js';
 
 const lines = ['function calculate(input: number): number {', '  let value = input;'];
 for (let i = 0; i < 196; i += 1) {
