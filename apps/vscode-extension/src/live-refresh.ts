@@ -55,7 +55,7 @@ export class LiveFlowRefresh implements vscode.Disposable {
     this.root = {
       uri: document.uri.toString(),
       name: symbol.name,
-      anchorOffset: Math.min(document.getText().length, document.offsetAt(start) + 1)
+      anchorOffset: document.offsetAt(start)
     };
     this.cache.set(
       { uri: this.root.uri, version: document.version, symbolId: symbol.symbolId },
@@ -113,9 +113,10 @@ export class LiveFlowRefresh implements vscode.Disposable {
       const key = { uri: request.uri, version: request.documentVersion, symbolId: symbol.symbolId };
       let graph = this.cache.get(key);
       if (!graph) {
+        const isCurrent = (): boolean => this.generation.isCurrent(generation);
         const analysis = await this.adapter.analyzeFunction(request, symbol, {
           get isCancellationRequested() {
-            return false;
+            return !isCurrent();
           }
         });
         graph = buildControlFlowGraph(analysis);
