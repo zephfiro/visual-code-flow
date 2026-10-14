@@ -26,6 +26,7 @@ export function activate(context: vscode.ExtensionContext): void {
   let activeDecoration: vscode.TextEditorDecorationType | undefined;
   let selectedGraphNodeId: string | undefined;
   let sourceDirty = false;
+  let testDispatch: ((message: unknown) => void) | undefined;
   let rootUri: string | undefined;
   const sessionStore = new FlowSessionStore(context.workspaceState);
 
@@ -131,13 +132,13 @@ export function activate(context: vscode.ExtensionContext): void {
         () => {
           persist();
           panel = undefined;
+          testDispatch = undefined;
           refresh.cancelPending();
         },
         null,
         context.subscriptions
       );
-      panel.webview.onDidReceiveMessage(
-        (message: unknown) => {
+      const handler = (message: unknown): void => {
           if (!isGraphViewMessage(message)) return;
           if (message.type === 'node:expand') {
             if (sourceDirty) return;
@@ -251,10 +252,9 @@ export function activate(context: vscode.ExtensionContext): void {
               nodeId: selectedGraphNodeId
             });
           }
-        },
-        null,
-        context.subscriptions
-      );
+      };
+      testDispatch = handler;
+      panel.webview.onDidReceiveMessage(handler, null, context.subscriptions);
     } else {
       panel.reveal(vscode.ViewColumn.Beside, true);
     }
@@ -317,6 +317,21 @@ export function activate(context: vscode.ExtensionContext): void {
       persist();
     }
   });
+
+  if (context.extensionMode === vscode.ExtensionMode.Test) {
+    context.subscriptions.push(
+      vscode.commands.registerCommand('visualCodeFlow.__test.inspect', () => ({
+        panel: Boolean(panel),
+        graph: currentGraph,
+        dirty: sourceDirty,
+        status: currentStatus,
+        expandedIds: expansionSession?.expandedCalls ?? []
+      })),
+      vscode.commands.registerCommand('visualCodeFlow.__test.dispatch', (message: unknown) => {
+        testDispatch?.(message);
+      })
+    );
+  }
 
   context.subscriptions.push(refresh, changeListener, selectionListener, configListener, openFlow, {
     dispose: () => {
