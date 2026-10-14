@@ -35,3 +35,34 @@ test('returns undefined when cursor is outside any function', () => {
   };
   assert.equal(adapter.findFunction(request, { line: 0, character: 3 }), undefined);
 });
+
+test('resolves a unique top-level function call', async () => {
+  const text = 'function helper(x: number) { return x * 2; } function main() { helper(3); }';
+  const request = { uri: 'file:///test.ts', text, languageId: 'typescript', documentVersion: 1 };
+  const start = text.indexOf('helper(3)');
+  const result = await adapter.resolveCall(request, {
+    uri: request.uri,
+    start: { line: 0, character: start },
+    end: { line: 0, character: start + 'helper(3)'.length }
+  });
+  assert.equal(result.targets.length, 1);
+  assert.equal(result.targets[0]?.definition.start.character, 0);
+});
+
+test('does not infer dynamic method calls or unknown names', async () => {
+  const text = 'function main() { service.helper(); missing(); }';
+  const request = { uri: 'file:///test.ts', text, languageId: 'typescript', documentVersion: 1 };
+  for (const [needle, reason] of [
+    ['service.helper()', 'dynamic'],
+    ['missing()', 'not-found']
+  ] as const) {
+    const start = text.indexOf(needle);
+    const result = await adapter.resolveCall(request, {
+      uri: request.uri,
+      start: { line: 0, character: start },
+      end: { line: 0, character: start + needle.length }
+    });
+    assert.deepEqual(result.targets, []);
+    assert.equal(result.reason, reason);
+  }
+});
