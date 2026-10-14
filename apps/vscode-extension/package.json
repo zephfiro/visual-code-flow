@@ -1,13 +1,16 @@
 {
   "name": "visual-code-flow",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "private": false,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node22 --external:vscode --minify --outfile=dist/extension.cjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "node --test",
-    "test:e2e": "node ./e2e/run.mjs"
+    "test:e2e": "node ./e2e/run.mjs",
+    "vscode:prepublish": "npm run build --prefix ../..",
+    "package:vsix": "vsce package --no-dependencies --out artifacts/visual-code-flow-0.1.0.vsix",
+    "test:install-vsix": "node ./e2e/install-vsix.mjs"
   },
   "displayName": "Visual Code Flow",
   "description": "Explore code control flow inside VS Code",
@@ -18,7 +21,7 @@
   "categories": [
     "Other"
   ],
-  "main": "./dist/extension.js",
+  "main": "./dist/extension.cjs",
   "activationEvents": [
     "onCommand:visualCodeFlow.openFlow"
   ],
@@ -76,10 +79,17 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/vscode": "^1.96.0",
-    "@vscode/test-electron": "^2.5.2"
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.25.0",
+    "@vscode/vsce": "^4.0.0"
   },
   "dependencies": {
     "@visual-code-flow/analyzer-typescript": "0.0.0",
     "@visual-code-flow/flow-core": "0.0.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zephfiro/visual-code-flow"
   }
 }

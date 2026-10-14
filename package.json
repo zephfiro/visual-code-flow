@@ -8,7 +8,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @visual-code-flow/shared && npm run build -w @visual-code-flow/analyzer-typescript && npm run build -w @visual-code-flow/flow-core && npm run build --workspaces --if-present",
+    "build": "npm run build -w @visual-code-flow/shared && npm run build -w @visual-code-flow/flow-core && npm run build -w @visual-code-flow/analyzer-typescript && npm run build -w @visual-code-flow/exporter-mermaid && npm run build -w @visual-code-flow/renderer-react && npm run build -w visual-code-flow",
     "lint": "eslint .",
     "typecheck": "npm run build -w @visual-code-flow/shared && npm run build -w @visual-code-flow/analyzer-typescript && npm run build -w @visual-code-flow/flow-core && npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
@@ -16,7 +16,8 @@
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "benchmark": "npm run build && node benchmarks/report.mjs",
-    "test:e2e": "npm run build && npm run test:e2e --workspace visual-code-flow"
+    "test:e2e": "npm run build && npm run test:e2e --workspace visual-code-flow",
+    "package:vsix": "npm run package:vsix -w visual-code-flow"
   },
   "devDependencies": {
     "@eslint/js": "^9.25.0",

@@ -1,0 +1,13 @@
+.vscode/**
+.vscode-test/**
+src/**
+e2e/**
+node_modules/**
+artifacts/**
+tsconfig.json
+dist/**/*.js
+dist/**/*.d.ts
+dist/**/*.map
+media/**/*.map
+**/*.test.*
+*.vsix

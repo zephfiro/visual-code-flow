@@ -36,3 +36,26 @@ jobs:
         run: xvfb-run -a npm run test:e2e
       - name: Report performance benchmarks
         run: npm run benchmark
+
+  package:
+    name: VSIX package and clean installation
+    needs: [quality, integration]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Package extension
+        run: npm run package:vsix
+      - name: Verify archive contents
+        run: node scripts/verify-vsix.mjs
+      - name: Install in clean VS Code profile
+        run: xvfb-run -a npm run test:install-vsix --workspace visual-code-flow
+      - uses: actions/upload-artifact@v4
+        with:
+          name: visual-code-flow-0.1.0-vsix
+          path: apps/vscode-extension/artifacts/visual-code-flow-0.1.0.vsix
+          if-no-files-found: error
