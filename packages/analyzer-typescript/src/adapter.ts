@@ -198,8 +198,7 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
         (ts.isExpressionStatement(node) && ts.isCallExpression(node.expression)) ||
         (ts.isVariableStatement(node) &&
           node.declarationList.declarations.some(
-            (declaration) =>
-              declaration.initializer && ts.isCallExpression(declaration.initializer)
+            (declaration) => declaration.initializer && ts.isCallExpression(declaration.initializer)
           ))
       )
         kind = 'call';
