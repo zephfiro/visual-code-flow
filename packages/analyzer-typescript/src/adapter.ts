@@ -194,14 +194,22 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
     while (ancestor && !ts.isSourceFile(ancestor)) {
       const functionScope = ancestor;
       if (isFunction(functionScope)) {
-        if (functionScope.parameters.some((parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === name)) {
+        if (
+          functionScope.parameters.some(
+            (parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === name
+          )
+        ) {
           return { callSite, targets: [], reason: 'ambiguous' };
         }
         if (functionScope.body) {
           let shadowed = false;
           const scan = (node: ts.Node): void => {
             if (node !== functionScope.body && isFunction(node)) return;
-            if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name) {
+            if (
+              ts.isVariableDeclaration(node) &&
+              ts.isIdentifier(node.name) &&
+              node.name.text === name
+            ) {
               shadowed = true;
             }
             ts.forEachChild(node, scan);
@@ -216,9 +224,13 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
     const collect = (node: ts.Node): void => {
       if (ts.isFunctionDeclaration(node) && node.name?.text === name && node.body) {
         candidates.push(node);
-      } else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) &&
-        node.name.text === name && node.initializer &&
-        (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) {
+      } else if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === name &&
+        node.initializer &&
+        (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
+      ) {
         candidates.push(node.initializer);
       }
       ts.forEachChild(node, collect);
@@ -230,10 +242,12 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
     const topLevel = candidates.filter((candidate) => {
       if (ts.isFunctionDeclaration(candidate)) return ts.isSourceFile(candidate.parent);
       const declaration = candidate.parent;
-      return ts.isVariableDeclaration(declaration) &&
+      return (
+        ts.isVariableDeclaration(declaration) &&
         ts.isVariableDeclarationList(declaration.parent) &&
         ts.isVariableStatement(declaration.parent.parent) &&
-        ts.isSourceFile(declaration.parent.parent.parent);
+        ts.isSourceFile(declaration.parent.parent.parent)
+      );
     });
     if (topLevel.length !== 1 || candidates.length !== 1) {
       return { callSite, targets: [], reason: candidates.length === 0 ? 'not-found' : 'ambiguous' };
@@ -241,10 +255,12 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
     const target = topLevel[0]!;
     return {
       callSite,
-      targets: [{
-        symbolId: `${request.uri}#${target.getStart(file)}`,
-        definition: span(file, request.uri, target)
-      }]
+      targets: [
+        {
+          symbolId: `${request.uri}#${target.getStart(file)}`,
+          definition: span(file, request.uri, target)
+        }
+      ]
     };
   }
 }
