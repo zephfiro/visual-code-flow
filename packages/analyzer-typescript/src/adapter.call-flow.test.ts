@@ -21,6 +21,9 @@ test('a function call assigned to a variable is still an expandable call node', 
   const symbol = adapter.findFunction(request, { line: 2, character: 8 });
   assert.ok(symbol);
   const analysis = await adapter.analyzeFunction(request, symbol);
-  assert.deepEqual(analysis.statements.map((item) => item.kind), ['call', 'return']);
+  assert.deepEqual(
+    analysis.statements.map((item) => item.kind),
+    ['call', 'return']
+  );
   assert.equal(analysis.statements[0]?.location.start.line, 2);
 });
