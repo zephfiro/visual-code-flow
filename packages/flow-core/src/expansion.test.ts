@@ -71,3 +71,15 @@ test('invalid calls and duplicate expansion return explicit reasons', () => {
     reason: 'already-expanded'
   });
 });
+
+test('restores expansion state only for a matching root', () => {
+  const initial = new FlowExpansionSession(graph('root'));
+  initial.expand('call', graph('helper'));
+  initial.expand('call::call', graph('nested'));
+  const saved = initial.snapshot();
+  const restored = new FlowExpansionSession(graph('root'));
+  assert.equal(restored.restore(saved), 2);
+  assert.deepEqual(restored.expandedCalls, ['call', 'call::call']);
+  const unrelated = new FlowExpansionSession(graph('other'));
+  assert.equal(unrelated.restore(saved), 0);
+});
