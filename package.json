@@ -14,7 +14,9 @@
     "test": "npm run test --workspaces --if-present",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "format:check": "prettier --check .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "benchmark": "npm run build && node benchmarks/report.mjs",
+    "test:e2e": "npm run build && npm run test:e2e --workspace @visual-code-flow/extension"
   },
   "devDependencies": {
     "@eslint/js": "^9.25.0",
