@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node --test"
+    "test": "node --test",
+    "test:e2e": "node ./e2e/run.mjs"
   },
   "displayName": "Visual Code Flow",
   "description": "Explore code control flow inside VS Code",
@@ -74,7 +75,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@types/vscode": "^1.96.0"
+    "@types/vscode": "^1.96.0",
+    "@vscode/test-electron": "^2.5.2"
   },
   "dependencies": {
     "@visual-code-flow/analyzer-typescript": "0.0.0",
