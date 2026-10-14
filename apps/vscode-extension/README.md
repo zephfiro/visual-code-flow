@@ -14,12 +14,12 @@ The diagram supports zoom, pan, a minimap, keyboard node selection, and source/e
 
 ## Settings
 
-| Setting | Default | Description |
-| --- | --- | --- |
-| `visualCodeFlow.autoRefresh` | `true` | Reanalyze on related document changes |
-| `visualCodeFlow.refreshDebounceMs` | `400` | Refresh delay in milliseconds (100–5000) |
-| `visualCodeFlow.maxExpansionDepth` | `3` | Maximum nested expansion depth (1–5) |
-| `visualCodeFlow.layoutDirection` | `TB` | Top-to-bottom (`TB`) or left-to-right (`LR`) |
+| Setting                            | Default | Description                                  |
+| ---------------------------------- | ------- | -------------------------------------------- |
+| `visualCodeFlow.autoRefresh`       | `true`  | Reanalyze on related document changes        |
+| `visualCodeFlow.refreshDebounceMs` | `400`   | Refresh delay in milliseconds (100–5000)     |
+| `visualCodeFlow.maxExpansionDepth` | `3`     | Maximum nested expansion depth (1–5)         |
+| `visualCodeFlow.layoutDirection`   | `TB`    | Top-to-bottom (`TB`) or left-to-right (`LR`) |
 
 Session expansions are stored in VS Code workspace state and only restored if the source contents still match. Code analysis happens locally and does not require an external service.
 
