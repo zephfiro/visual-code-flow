@@ -1,5 +1,5 @@
 {
-  "name": "@visual-code-flow/extension",
+  "name": "visual-code-flow",
   "version": "0.0.0",
   "private": true,
   "type": "module",
