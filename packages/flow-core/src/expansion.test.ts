@@ -10,7 +10,9 @@ function graph(symbol: string, call = true): FlowGraph {
     rootSymbolId: symbol,
     nodes: [
       { id: 'entry', kind: 'entry', label: symbol, expandable: false },
-      ...(call ? [{ id: 'call', kind: 'call' as const, label: 'helper()', expandable: false }] : []),
+      ...(call
+        ? [{ id: 'call', kind: 'call' as const, label: 'helper()', expandable: false }]
+        : []),
       { id: 'exit', kind: 'exit', label: 'Exit', expandable: false }
     ],
     edges: call
