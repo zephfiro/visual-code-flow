@@ -9,6 +9,8 @@ import {
 import { createGraphWebview, isGraphViewMessage } from './webview.js';
 import { resolveCalledFunction } from './call-resolver.js';
 import { LiveFlowRefresh } from './live-refresh.js';
+import { readFlowSettings } from './settings.js';
+import { FlowSessionStore } from './session-store.js';
 
 export const OPEN_FLOW_COMMAND = 'visualCodeFlow.openFlow';
 
@@ -24,11 +26,13 @@ export function activate(context: vscode.ExtensionContext): void {
   let activeDecoration: vscode.TextEditorDecorationType | undefined;
   let selectedGraphNodeId: string | undefined;
   let sourceDirty = false;
+  let rootUri: string | undefined;
+  const sessionStore = new FlowSessionStore(context.workspaceState);
 
   const refresh = new LiveFlowRefresh(
     adapter,
     (graph, symbol) => {
-      expansionSession = new FlowExpansionSession(graph);
+      expansionSession = new FlowExpansionSession(graph, readFlowSettings().maxExpansionDepth);
       currentGraph = expansionSession.getGraph();
       currentSourceMap = new SourceMapIndex(currentGraph);
       selectedGraphNodeId = undefined;
@@ -40,12 +44,21 @@ export function activate(context: vscode.ExtensionContext): void {
       void panel?.webview.postMessage({ type: 'expanded', nodeIds: [] });
       void panel?.webview.postMessage({ type: 'node:highlight' });
       currentStatus = `Flow updated: ${symbol.name}`;
+      persist();
     },
     (message) => {
       currentStatus = message;
       void panel?.webview.postMessage({ type: 'status', message });
     }
   );
+
+  const persist = (): void => {
+    if (!sourceDirty && rootUri && expansionSession) {
+      void sessionStore.save(rootUri, expansionSession, selectedGraphNodeId);
+    }
+  };
+
+  refresh.setDebounceMs(readFlowSettings().refreshDebounceMs);
 
   const openFlow = vscode.commands.registerCommand(OPEN_FLOW_COMMAND, async () => {
     const editor = vscode.window.activeTextEditor;
@@ -55,6 +68,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     refresh.cancelPending();
+    sessionStore.invalidate();
     sourceEditorColumn = editor.viewColumn ?? vscode.ViewColumn.One;
     const document = editor.document;
     if (!adapter.supportedLanguages.includes(document.languageId)) {
@@ -94,12 +108,18 @@ export function activate(context: vscode.ExtensionContext): void {
         selected
       );
       const graph = buildControlFlowGraph(analysis);
-      expansionSession = new FlowExpansionSession(graph);
+      const nextSession = new FlowExpansionSession(graph, readFlowSettings().maxExpansionDepth);
+      const previous = await sessionStore.restore(document.uri.toString(), graph);
+      if (previous) nextSession.restore(previous.expansions);
+      expansionSession = nextSession;
       currentGraph = expansionSession.getGraph();
+      rootUri = document.uri.toString();
       refresh.track(document, selected, graph);
+      refresh.watchGraph(currentGraph);
       sourceDirty = false;
       currentSourceMap = new SourceMapIndex(currentGraph);
-      selectedGraphNodeId = undefined;
+      selectedGraphNodeId = previous?.selectedNodeId;
+      persist();
     } catch (error) {
       const details = error instanceof Error ? error.message : String(error);
       await vscode.window.showErrorMessage(`Visual Code Flow: ${details}`);
@@ -109,6 +129,7 @@ export function activate(context: vscode.ExtensionContext): void {
       panel = createGraphWebview(context);
       panel.onDidDispose(
         () => {
+          persist();
           panel = undefined;
           refresh.cancelPending();
         },
@@ -146,6 +167,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 currentGraph = session.getGraph();
                 currentSourceMap = new SourceMapIndex(currentGraph);
                 refresh.watchGraph(currentGraph);
+                persist();
                 await panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
                 await panel?.webview.postMessage({
                   type: 'expanded',
@@ -166,6 +188,7 @@ export function activate(context: vscode.ExtensionContext): void {
             currentGraph = expansionSession.getGraph();
             currentSourceMap = new SourceMapIndex(currentGraph);
             refresh.watchGraph(currentGraph);
+            persist();
             void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
             void panel?.webview.postMessage({
               type: 'expanded',
@@ -176,6 +199,7 @@ export function activate(context: vscode.ExtensionContext): void {
           if (message.type === 'node:selected') {
             if (sourceDirty) return;
             selectedGraphNodeId = message.nodeId;
+            persist();
             const location = currentSourceMap?.getSource(message.nodeId!);
             if (!location) return;
             void (async () => {
@@ -212,6 +236,10 @@ export function activate(context: vscode.ExtensionContext): void {
           }
           if (message.type === 'ready') {
             void panel?.webview.postMessage({ type: 'status', message: currentStatus });
+            void panel?.webview.postMessage({
+              type: 'settings',
+              layoutDirection: readFlowSettings().layoutDirection
+            });
             if (currentGraph)
               void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
             void panel?.webview.postMessage({
@@ -231,16 +259,24 @@ export function activate(context: vscode.ExtensionContext): void {
       panel.reveal(vscode.ViewColumn.Beside, true);
     }
     await panel.webview.postMessage({ type: 'status', message: currentStatus });
+    await panel.webview.postMessage({
+      type: 'settings',
+      layoutDirection: readFlowSettings().layoutDirection
+    });
     await panel.webview.postMessage({ type: 'graph', graph: currentGraph });
     await panel.webview.postMessage({
       type: 'expanded',
       nodeIds: expansionSession?.expandedCalls ?? []
     });
+    await panel.webview.postMessage({ type: 'node:highlight', nodeId: selectedGraphNodeId });
   });
 
   const changeListener = vscode.workspace.onDidChangeTextDocument((event) => {
     if (!panel) return;
-    if (refresh.onDocumentChanged(event)) sourceDirty = true;
+    if (refresh.onDocumentChanged(event, readFlowSettings().autoRefresh)) {
+      sourceDirty = true;
+      sessionStore.invalidate();
+    }
   });
 
   const selectionListener = vscode.window.onDidChangeTextEditorSelection((event) => {
@@ -254,7 +290,35 @@ export function activate(context: vscode.ExtensionContext): void {
     void panel.webview.postMessage({ type: 'node:highlight', nodeId: selectedGraphNodeId });
   });
 
-  context.subscriptions.push(refresh, changeListener, selectionListener, openFlow, {
+  const configListener = vscode.workspace.onDidChangeConfiguration((event) => {
+    if (!event.affectsConfiguration('visualCodeFlow')) return;
+    const settings = readFlowSettings();
+    refresh.setDebounceMs(settings.refreshDebounceMs);
+    void panel?.webview.postMessage({
+      type: 'settings',
+      layoutDirection: settings.layoutDirection
+    });
+    if (settings.autoRefresh && sourceDirty) refresh.requestRefresh();
+    if (expansionSession && expansionSession.maxDepth !== settings.maxExpansionDepth) {
+      const saved = expansionSession.snapshot();
+      expansionSession = new FlowExpansionSession(
+        expansionSession.root,
+        settings.maxExpansionDepth
+      );
+      expansionSession.restore(saved);
+      currentGraph = expansionSession.getGraph();
+      currentSourceMap = new SourceMapIndex(currentGraph);
+      refresh.watchGraph(currentGraph);
+      void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
+      void panel?.webview.postMessage({
+        type: 'expanded',
+        nodeIds: expansionSession.expandedCalls
+      });
+      persist();
+    }
+  });
+
+  context.subscriptions.push(refresh, changeListener, selectionListener, configListener, openFlow, {
     dispose: () => {
       activeDecoration?.dispose();
       panel?.dispose();
