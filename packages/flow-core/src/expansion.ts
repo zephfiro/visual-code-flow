@@ -8,6 +8,14 @@ export interface ExpansionResult {
   readonly reason?: ExpansionFailure;
 }
 
+export interface FlowExpansionSnapshot {
+  readonly rootSymbolId: string;
+  readonly entries: readonly {
+    readonly callId: string;
+    readonly graph: FlowGraph;
+  }[];
+}
+
 interface Expansion {
   readonly parentCallId: string;
   readonly graph: FlowGraph;
@@ -112,6 +120,30 @@ export class FlowExpansionSession {
       if (key === callId || key.startsWith(`${callId}::`)) this.expansions.delete(key);
     }
     return true;
+  }
+
+  snapshot(): FlowExpansionSnapshot {
+    return {
+      rootSymbolId: this.root.rootSymbolId,
+      entries: [...this.expansions.values()].map((entry) => ({
+        callId: entry.parentCallId,
+        graph: entry.graph
+      }))
+    };
+  }
+
+  restore(snapshot: FlowExpansionSnapshot): number {
+    if (!snapshot || snapshot.rootSymbolId !== this.root.rootSymbolId) return 0;
+    this.reset();
+    let restored = 0;
+    for (const entry of snapshot.entries) {
+      try {
+        if (this.expand(entry.callId, entry.graph).ok) restored += 1;
+      } catch {
+        // Ignore invalid or obsolete data stored by an older version of the extension.
+      }
+    }
+    return restored;
   }
 
   reset(): void {
