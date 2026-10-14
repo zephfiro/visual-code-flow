@@ -11,6 +11,8 @@ import {
   type NodeMouseHandler
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import './styles.css';
+import { expansionAction } from './expansion-action.js';
 import type { FlowGraph, FlowNode } from '@visual-code-flow/flow-core';
 
 interface VsCodeBridge {
@@ -20,14 +22,14 @@ interface VsCodeBridge {
 declare function acquireVsCodeApi(): VsCodeBridge;
 
 const colors: Record<string, string> = {
-  entry: '#065f46',
-  exit: '#065f46',
-  condition: '#92400e',
-  loop: '#78350f',
+  entry: '#047857',
+  exit: '#047857',
+  condition: '#a16207',
+  loop: '#92400e',
   call: '#1d4ed8',
-  return: '#4338ca',
-  throw: '#991b1b',
-  unsupported: '#9f1239',
+  return: '#4f46e5',
+  throw: '#b91c1c',
+  unsupported: '#be123c',
   merge: '#475569',
   operation: '#334155'
 };
@@ -36,7 +38,7 @@ function nodeStyle(node: FlowNode): NonNullable<Node['style']> {
   return {
     background: colors[node.kind] ?? '#334155',
     color: '#f8fafc',
-    border: '1px solid rgba(255,255,255,.25)',
+    border: '1px solid rgba(255,255,255,.22)',
     borderRadius: node.kind === 'entry' || node.kind === 'exit' ? 24 : 10,
     padding: 12,
     fontSize: 12,
@@ -52,9 +54,7 @@ function layoutGraph(graph: FlowGraph): { nodes: Node[]; edges: Edge[] } {
   layout.setGraph({ rankdir: 'TB', ranksep: 65, nodesep: 30 });
   layout.setDefaultEdgeLabel(() => ({}));
 
-  for (const node of graph.nodes) {
-    layout.setNode(node.id, { width: 215, height: 65 });
-  }
+  for (const node of graph.nodes) layout.setNode(node.id, { width: 215, height: 65 });
   for (const edge of graph.edges) layout.setEdge(edge.source, edge.target);
   dagre.layout(layout);
 
@@ -64,11 +64,11 @@ function layoutGraph(graph: FlowGraph): { nodes: Node[]; edges: Edge[] } {
       id: node.id,
       data: { label: node.label },
       type: 'default',
+      ariaLabel: `${node.kind}: ${node.label}`,
       position: { x: position.x - 107.5, y: position.y - 32.5 },
       style: nodeStyle(node)
     };
   });
-
   const edges: Edge[] = graph.edges.map((edge) => ({
     id: edge.id,
     source: edge.source,
@@ -76,10 +76,9 @@ function layoutGraph(graph: FlowGraph): { nodes: Node[]; edges: Edge[] } {
     label: edge.label ?? (edge.kind === 'normal' ? undefined : edge.kind),
     type: 'smoothstep',
     animated: edge.kind === 'loop-back',
-    style: { stroke: '#94a3b8' },
+    style: { stroke: '#94a3b8', strokeDasharray: edge.label ? '5 5' : undefined },
     labelStyle: { fill: 'var(--vscode-foreground)', fontSize: 11 }
   }));
-
   return { nodes, edges };
 }
 
@@ -87,8 +86,11 @@ function FlowApp() {
   const [status, setStatus] = useState('Select a function to view its flow.');
   const [graph, setGraph] = useState<FlowGraph | undefined>();
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | undefined>();
+  const [expandedNodeIds, setExpandedNodeIds] = useState<readonly string[]>([]);
   const bridge = useMemo(() => acquireVsCodeApi(), []);
   const view = useMemo(() => (graph ? layoutGraph(graph) : undefined), [graph]);
+  const expanded = useMemo(() => new Set(expandedNodeIds), [expandedNodeIds]);
+  const selectedNode = graph?.nodes.find((node) => node.id === highlightedNodeId);
   const highlightedNodes = useMemo(
     () =>
       view?.nodes.map((node) => ({
@@ -110,6 +112,9 @@ function FlowApp() {
       if (data.type === 'status' && 'message' in data && typeof data.message === 'string') {
         setStatus(data.message);
       }
+      if (data.type === 'expanded' && 'nodeIds' in data && Array.isArray(data.nodeIds)) {
+        setExpandedNodeIds(data.nodeIds.filter((id): id is string => typeof id === 'string'));
+      }
       if (
         data.type === 'graph' &&
         'graph' in data &&
@@ -126,49 +131,102 @@ function FlowApp() {
     return () => window.removeEventListener('message', onMessage);
   }, [bridge]);
 
-  const onNodeClick: NodeMouseHandler = (_, node) => {
-    bridge.postMessage({ type: 'node:selected', nodeId: node.id });
+  const chooseNode = (nodeId: string): void => {
+    setHighlightedNodeId(nodeId || undefined);
+    if (nodeId) bridge.postMessage({ type: 'node:selected', nodeId });
+  };
+
+  const toggleExpansion = (node: FlowNode): void => {
+    const action = expansionAction(node, expanded);
+    if (action) bridge.postMessage(action);
+  };
+
+  const onNodeClick: NodeMouseHandler = (_, node) => chooseNode(node.id);
+  const onNodeDoubleClick: NodeMouseHandler = (_, node) => {
+    const target = graph?.nodes.find((item) => item.id === node.id);
+    if (target) toggleExpansion(target);
   };
 
   return (
-    <section
-      style={{
-        fontFamily: 'var(--vscode-font-family)',
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100vh',
-        margin: 0
-      }}
-    >
-      <header
-        style={{ padding: '10px 16px', borderBottom: '1px solid var(--vscode-panel-border)' }}
-      >
-        <strong>Visual Code Flow</strong>
-        <p role="status" style={{ margin: '6px 0 0', fontSize: 12, opacity: 0.75 }}>
-          {status}
-        </p>
+    <section className="flow-shell">
+      <header className="flow-header">
+        <div className="flow-brand">
+          <span className="flow-brand-icon" aria-hidden="true">
+            ◈
+          </span>
+          <div>
+            <strong>Visual Code Flow</strong>
+            <p role="status" className="flow-status">
+              {status}
+            </p>
+          </div>
+          <span className="flow-count">{graph?.nodes.length ?? 0} nodes</span>
+        </div>
+        <div className="flow-toolbar">
+          <label htmlFor="flow-node-picker">Navigate</label>
+          <select
+            id="flow-node-picker"
+            aria-label="Select graph node"
+            value={selectedNode?.id ?? ''}
+            onChange={(event) => chooseNode(event.target.value)}
+          >
+            <option value="">Choose node...</option>
+            {graph?.nodes.map((node) => (
+              <option key={node.id} value={node.id}>
+                {node.kind}: {node.label.slice(0, 72)}
+              </option>
+            ))}
+          </select>
+          {selectedNode?.kind === 'call' && (
+            <button
+              type="button"
+              className="flow-action"
+              onClick={() => toggleExpansion(selectedNode)}
+              title="You can also double-click a call node"
+            >
+              {expanded.has(selectedNode.id) ? '− Collapse' : '+ Expand call'}
+            </button>
+          )}
+        </div>
       </header>
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <main className="flow-canvas">
         {view && view.nodes.length > 0 ? (
           <ReactFlow
             nodes={highlightedNodes ?? view.nodes}
             edges={view.edges}
             onNodeClick={onNodeClick}
+            onNodeDoubleClick={onNodeDoubleClick}
             fitView
             minZoom={0.15}
             maxZoom={2}
             nodesDraggable={false}
             nodesConnectable={false}
+            elementsSelectable
             colorMode="dark"
+            aria-label="Interactive code flow diagram"
           >
             <Background gap={20} color="#475569" />
             <MiniMap pannable zoomable />
             <Controls showInteractive={false} />
           </ReactFlow>
         ) : (
-          <p style={{ padding: 16, opacity: 0.7 }}>Select a function to generate a flowchart.</p>
+          <div className="flow-empty">
+            <div className="flow-empty-icon" aria-hidden="true">
+              ◇
+            </div>
+            <strong>Explore a function</strong>
+            <p>Place your cursor inside a function and run Visual Code Flow: Open Flow.</p>
+          </div>
         )}
-      </div>
+      </main>
+      <footer className="flow-footer">
+        <span>
+          {selectedNode
+            ? `${selectedNode.kind.toUpperCase()} · ${selectedNode.label.slice(0, 100)}`
+            : 'Click a node to reveal its source'}
+        </span>
+        <span>Scroll to zoom · Drag canvas to pan · Double-click a call to expand</span>
+      </footer>
     </section>
   );
 }
