@@ -21,3 +21,18 @@ jobs:
             git --no-pager diff -- .
             exit 1
           fi
+
+  integration:
+    name: VS Code integration and benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Integration tests (VS Code Extension Host)
+        run: xvfb-run -a npm run test:e2e
+      - name: Report performance benchmarks
+        run: npm run benchmark
