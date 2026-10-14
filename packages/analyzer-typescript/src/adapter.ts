@@ -125,16 +125,10 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
   }
 
   /** Callee identifier position used by VS Code's definition provider. */
-  findCallTargetPosition(
-    request: AnalysisRequest,
-    callSite: SourceSpan
-  ): TextPosition | undefined {
+  findCallTargetPosition(request: AnalysisRequest, callSite: SourceSpan): TextPosition | undefined {
     const file = sourceFile(request);
     if (callSite.uri !== request.uri) return undefined;
-    const start = file.getPositionOfLineAndCharacter(
-      callSite.start.line,
-      callSite.start.character
-    );
+    const start = file.getPositionOfLineAndCharacter(callSite.start.line, callSite.start.character);
     const end = file.getPositionOfLineAndCharacter(callSite.end.line, callSite.end.character);
     let found: ts.CallExpression | undefined;
 
