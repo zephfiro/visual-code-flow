@@ -1,7 +1,13 @@
 import * as vscode from 'vscode';
 import { TypeScriptLanguageAdapter } from '@visual-code-flow/analyzer-typescript';
-import { buildControlFlowGraph, SourceMapIndex, type FlowGraph } from '@visual-code-flow/flow-core';
+import {
+  buildControlFlowGraph,
+  FlowExpansionSession,
+  SourceMapIndex,
+  type FlowGraph
+} from '@visual-code-flow/flow-core';
 import { createGraphWebview, isGraphViewMessage } from './webview.js';
+import { resolveCalledFunction } from './call-resolver.js';
 
 export const OPEN_FLOW_COMMAND = 'visualCodeFlow.openFlow';
 
@@ -12,6 +18,7 @@ export function activate(context: vscode.ExtensionContext): void {
   let currentStatus = 'Select a function to view its flow.';
   let currentGraph: FlowGraph | undefined;
   let currentSourceMap: SourceMapIndex | undefined;
+  let expansionSession: FlowExpansionSession | undefined;
   let sourceEditorColumn: vscode.ViewColumn = vscode.ViewColumn.One;
   let activeDecoration: vscode.TextEditorDecorationType | undefined;
   let selectedGraphNodeId: string | undefined;
@@ -61,7 +68,8 @@ export function activate(context: vscode.ExtensionContext): void {
         },
         selected
       );
-      currentGraph = buildControlFlowGraph(analysis);
+      expansionSession = new FlowExpansionSession(buildControlFlowGraph(analysis));
+      currentGraph = expansionSession.getGraph();
       currentSourceMap = new SourceMapIndex(currentGraph);
       selectedGraphNodeId = undefined;
     } catch (error) {
@@ -81,6 +89,57 @@ export function activate(context: vscode.ExtensionContext): void {
       panel.webview.onDidReceiveMessage(
         (message: unknown) => {
           if (!isGraphViewMessage(message)) return;
+          if (message.type === 'node:expand') {
+            const session = expansionSession;
+            const node = session?.getGraph().nodes.find((item) => item.id === message.nodeId);
+            if (!session || !node?.source || node.kind !== 'call') return;
+            void (async () => {
+              try {
+                const resolved = await resolveCalledFunction(adapter, node.source!);
+                if (!resolved || expansionSession !== session) {
+                  if (expansionSession === session) {
+                    void vscode.window.showInformationMessage(
+                      'Visual Code Flow: call definition could not be resolved.'
+                    );
+                  }
+                  return;
+                }
+                const analysis = await adapter.analyzeFunction(resolved.request, resolved.symbol);
+                if (expansionSession !== session) return;
+                const outcome = session.expand(node.id, buildControlFlowGraph(analysis));
+                if (!outcome.ok) {
+                  void vscode.window.showInformationMessage(
+                    `Visual Code Flow: cannot expand call (${outcome.reason}).`
+                  );
+                  return;
+                }
+                currentGraph = session.getGraph();
+                currentSourceMap = new SourceMapIndex(currentGraph);
+                await panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
+                await panel?.webview.postMessage({
+                  type: 'expanded',
+                  nodeIds: session.expandedCalls
+                });
+              } catch (error) {
+                const details = error instanceof Error ? error.message : String(error);
+                void vscode.window.showErrorMessage(
+                  `Visual Code Flow expansion failed: ${details}`
+                );
+              }
+            })();
+            return;
+          }
+          if (message.type === 'node:collapse') {
+            if (!expansionSession?.collapse(message.nodeId!)) return;
+            currentGraph = expansionSession.getGraph();
+            currentSourceMap = new SourceMapIndex(currentGraph);
+            void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
+            void panel?.webview.postMessage({
+              type: 'expanded',
+              nodeIds: expansionSession.expandedCalls
+            });
+            return;
+          }
           if (message.type === 'node:selected') {
             selectedGraphNodeId = message.nodeId;
             const location = currentSourceMap?.getSource(message.nodeId!);
@@ -122,6 +181,10 @@ export function activate(context: vscode.ExtensionContext): void {
             if (currentGraph)
               void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
             void panel?.webview.postMessage({
+              type: 'expanded',
+              nodeIds: expansionSession?.expandedCalls ?? []
+            });
+            void panel?.webview.postMessage({
               type: 'node:highlight',
               nodeId: selectedGraphNodeId
             });
@@ -135,6 +198,10 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     await panel.webview.postMessage({ type: 'status', message: currentStatus });
     await panel.webview.postMessage({ type: 'graph', graph: currentGraph });
+    await panel.webview.postMessage({
+      type: 'expanded',
+      nodeIds: expansionSession?.expandedCalls ?? []
+    });
   });
 
   const selectionListener = vscode.window.onDidChangeTextEditorSelection((event) => {

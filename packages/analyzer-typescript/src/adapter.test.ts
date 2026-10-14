@@ -66,3 +66,26 @@ test('does not infer dynamic method calls or unknown names', async () => {
     assert.equal(result.reason, reason);
   }
 });
+
+test('finds arrow function definitions at the declared variable name', () => {
+  const text = 'export const helper = (x: number) => x + 1;';
+  const request = { uri: 'file:///helpers.ts', text, languageId: 'typescript', documentVersion: 1 };
+  const descriptor = adapter.findFunctionDefinition(request, {
+    line: 0,
+    character: text.indexOf('helper')
+  });
+  assert.equal(descriptor?.name, 'helper');
+  assert.ok(descriptor?.location.start.character !== undefined);
+});
+
+test('finds the method identifier for definition-provider lookup', () => {
+  const text = 'function main() { service.helper(2); }';
+  const request = { uri: 'file:///main.ts', text, languageId: 'typescript', documentVersion: 1 };
+  const callStart = text.indexOf('service.helper');
+  const position = adapter.findCallTargetPosition(request, {
+    uri: request.uri,
+    start: { line: 0, character: callStart },
+    end: { line: 0, character: callStart + 'service.helper(2);'.length }
+  });
+  assert.deepEqual(position, { line: 0, character: text.indexOf('helper') });
+});
