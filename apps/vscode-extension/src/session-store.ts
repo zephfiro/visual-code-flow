@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import * as vscode from 'vscode';
-import type { FlowExpansionSession, FlowExpansionSnapshot, FlowGraph } from '@visual-code-flow/flow-core';
+import type {
+  FlowExpansionSession,
+  FlowExpansionSnapshot,
+  FlowGraph
+} from '@visual-code-flow/flow-core';
 
 const STORAGE_KEY = 'visualCodeFlow.workspaceSession';
 const MAX_DOCUMENTS = 24;
