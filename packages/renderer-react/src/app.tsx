@@ -49,10 +49,7 @@ function nodeStyle(node: FlowNode): NonNullable<Node['style']> {
   };
 }
 
-function layoutGraph(
-  graph: FlowGraph,
-  direction: 'TB' | 'LR'
-): { nodes: Node[]; edges: Edge[] } {
+function layoutGraph(graph: FlowGraph, direction: 'TB' | 'LR'): { nodes: Node[]; edges: Edge[] } {
   const layout = new dagre.graphlib.Graph();
   layout.setGraph({ rankdir: direction, ranksep: 65, nodesep: 30 });
   layout.setDefaultEdgeLabel(() => ({}));
