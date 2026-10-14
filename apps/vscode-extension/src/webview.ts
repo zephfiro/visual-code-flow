@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 
 export interface GraphViewMessage {
-  readonly type: 'ready' | 'node:selected';
+  readonly type: 'ready' | 'node:selected' | 'node:expand' | 'node:collapse';
   readonly nodeId?: string;
 }
 
@@ -51,7 +51,9 @@ export function isGraphViewMessage(data: unknown): data is GraphViewMessage {
   const candidate = data as Record<string, unknown>;
   if (candidate.type === 'ready') return candidate.nodeId === undefined;
   return (
-    candidate.type === 'node:selected' &&
+    (candidate.type === 'node:selected' ||
+      candidate.type === 'node:expand' ||
+      candidate.type === 'node:collapse') &&
     typeof candidate.nodeId === 'string' &&
     candidate.nodeId.length > 0 &&
     candidate.nodeId.length <= 256
