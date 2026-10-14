@@ -93,9 +93,16 @@ async function run() {
       assert.equal(active.selection.start.line, returnNode.source.start.line);
     });
 
-    const updated = source.replace('const result = helper(value);', 'const result = helper(value + 1);');
+    const updated = source.replace(
+      'const result = helper(value);',
+      'const result = helper(value + 1);'
+    );
     const edit = new vscode.WorkspaceEdit();
-    edit.replace(uri, new vscode.Range(document.positionAt(0), document.positionAt(source.length)), updated);
+    edit.replace(
+      uri,
+      new vscode.Range(document.positionAt(0), document.positionAt(source.length)),
+      updated
+    );
     assert.ok(await vscode.workspace.applyEdit(edit));
     await retry(async () => {
       const current = await inspect();
