@@ -156,7 +156,9 @@ function FlowApp() {
           </span>
           <div>
             <strong>Visual Code Flow</strong>
-            <p role="status" className="flow-status">{status}</p>
+            <p role="status" className="flow-status">
+              {status}
+            </p>
           </div>
           <span className="flow-count">{graph?.nodes.length ?? 0} nodes</span>
         </div>
@@ -209,7 +211,9 @@ function FlowApp() {
           </ReactFlow>
         ) : (
           <div className="flow-empty">
-            <div className="flow-empty-icon" aria-hidden="true">◇</div>
+            <div className="flow-empty-icon" aria-hidden="true">
+              ◇
+            </div>
             <strong>Explore a function</strong>
             <p>Place your cursor inside a function and run Visual Code Flow: Open Flow.</p>
           </div>
