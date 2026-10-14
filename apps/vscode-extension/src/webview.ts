@@ -2,7 +2,8 @@ import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 
 export interface GraphViewMessage {
-  readonly type: 'ready' | 'node:selected' | 'node:expand' | 'node:collapse' | 'diagram:copy' | 'diagram:save';
+  readonly type:
+    'ready' | 'node:selected' | 'node:expand' | 'node:collapse' | 'diagram:copy' | 'diagram:save';
   readonly nodeId?: string;
 }
 
