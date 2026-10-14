@@ -79,6 +79,86 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
     };
   }
 
+  /**
+   * Definition providers often return an identifier on a variable declaration
+   * rather than the arrow function body. Resolve that location without guessing
+   * from surrounding functions.
+   */
+  findFunctionDefinition(
+    request: AnalysisRequest,
+    position: TextPosition
+  ): FunctionDescriptor | undefined {
+    const file = sourceFile(request);
+    const offset = file.getPositionOfLineAndCharacter(position.line, position.character);
+    let selected: ts.FunctionLikeDeclaration | undefined;
+
+    const visit = (node: ts.Node): void => {
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        offset >= node.name.getStart(file) &&
+        offset < node.name.getEnd() &&
+        node.initializer &&
+        (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
+      ) {
+        selected = node.initializer;
+      } else if (
+        isFunction(node) &&
+        'name' in node &&
+        node.name &&
+        offset >= node.name.getStart(file) &&
+        offset < node.name.getEnd()
+      ) {
+        selected = node;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(file);
+    if (!selected?.body) return undefined;
+    return {
+      symbolId: `${request.uri}#${selected.getStart(file)}`,
+      name: nameOf(selected),
+      location: span(file, request.uri, selected),
+      body: span(file, request.uri, selected.body),
+      languageId: request.languageId
+    };
+  }
+
+  /** Callee identifier position used by VS Code's definition provider. */
+  findCallTargetPosition(
+    request: AnalysisRequest,
+    callSite: SourceSpan
+  ): TextPosition | undefined {
+    const file = sourceFile(request);
+    if (callSite.uri !== request.uri) return undefined;
+    const start = file.getPositionOfLineAndCharacter(
+      callSite.start.line,
+      callSite.start.character
+    );
+    const end = file.getPositionOfLineAndCharacter(callSite.end.line, callSite.end.character);
+    let found: ts.CallExpression | undefined;
+
+    const visit = (node: ts.Node): void => {
+      if (node.getEnd() < start || node.getStart(file) > end) return;
+      if (
+        ts.isCallExpression(node) &&
+        node.getStart(file) >= start &&
+        node.getEnd() <= end &&
+        (!found || node.getStart(file) < found.getStart(file))
+      ) {
+        found = node;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(file);
+    if (!found) return undefined;
+    const expression = found.expression;
+    const offset = ts.isPropertyAccessExpression(expression)
+      ? expression.name.getStart(file)
+      : expression.getStart(file);
+    return file.getLineAndCharacterOfPosition(offset);
+  }
+
   async analyzeFunction(
     request: AnalysisRequest,
     symbol: FunctionDescriptor,
