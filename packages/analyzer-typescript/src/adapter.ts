@@ -165,7 +165,63 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
     return { function: symbol, statements, diagnostics: [] };
   }
 
-  async resolveCall(_request: AnalysisRequest, callSite: SourceSpan): Promise<CallResolution> {
-    return { callSite, targets: [], reason: 'unsupported' };
+  async resolveCall(request: AnalysisRequest, callSite: SourceSpan): Promise<CallResolution> {
+    if (callSite.uri !== request.uri) {
+      return { callSite, targets: [], reason: 'not-found' };
+    }
+
+    const file = sourceFile(request);
+    const offset = file.getPositionOfLineAndCharacter(callSite.start.line, callSite.start.character);
+    let call: ts.CallExpression | undefined;
+
+    const locate = (node: ts.Node): void => {
+      if (node.getStart(file) > offset || node.getEnd() <= offset) return;
+      if (ts.isCallExpression(node)) {
+        const start = node.getStart(file);
+        const end = node.getEnd();
+        if (start === offset || (start <= offset && offset < end)) call = node;
+      }
+      ts.forEachChild(node, locate);
+    };
+    locate(file);
+    if (!call) return { callSite, targets: [], reason: 'not-found' };
+    const expression: ts.LeftHandSideExpression = call.expression;
+    if (!ts.isIdentifier(expression)) return { callSite, targets: [], reason: 'dynamic' };
+
+    const name = expression.text;
+    const candidates: ts.FunctionLikeDeclaration[] = [];
+    const collect = (node: ts.Node): void => {
+      if (ts.isFunctionDeclaration(node) && node.name?.text === name && node.body) {
+        candidates.push(node);
+      } else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) &&
+        node.name.text === name && node.initializer &&
+        (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) {
+        candidates.push(node.initializer);
+      }
+      ts.forEachChild(node, collect);
+    };
+    collect(file);
+
+    // A syntactic match is not enough to resolve shadowing and imports safely.
+    // Only resolve a uniquely named top-level declaration; other calls are ambiguous.
+    const topLevel = candidates.filter((candidate) => {
+      if (ts.isFunctionDeclaration(candidate)) return ts.isSourceFile(candidate.parent);
+      const declaration = candidate.parent;
+      return ts.isVariableDeclaration(declaration) &&
+        ts.isVariableDeclarationList(declaration.parent) &&
+        ts.isVariableStatement(declaration.parent.parent) &&
+        ts.isSourceFile(declaration.parent.parent.parent);
+    });
+    if (topLevel.length !== 1 || candidates.length !== 1) {
+      return { callSite, targets: [], reason: candidates.length === 0 ? 'not-found' : 'ambiguous' };
+    }
+    const target = topLevel[0]!;
+    return {
+      callSite,
+      targets: [{
+        symbolId: `${request.uri}#${target.getStart(file)}`,
+        definition: span(file, request.uri, target)
+      }]
+    };
   }
 }
