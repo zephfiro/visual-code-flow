@@ -4,3 +4,4 @@ export * from './build-graph.js';
 export * from './source-map.js';
 export * from './cache.js';
 export * from './expansion.js';
+export * from './text-anchor.js';
