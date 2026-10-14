@@ -41,7 +41,7 @@ export async function resolveCalledFunction(
   if (location) {
     destination =
       'targetUri' in location
-        ? { uri: location.targetUri, position: location.targetSelectionRange.start }
+        ? { uri: location.targetUri, position: (location.targetSelectionRange ?? location.targetRange).start }
         : { uri: location.uri, position: location.range.start };
   } else {
     const fallback = await adapter.resolveCall(request, source);
