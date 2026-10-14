@@ -189,6 +189,28 @@ export class TypeScriptLanguageAdapter implements LanguageAdapter {
     if (!ts.isIdentifier(expression)) return { callSite, targets: [], reason: 'dynamic' };
 
     const name = expression.text;
+    // Refuse syntactic resolution when a containing function can shadow the name.
+    let ancestor: ts.Node | undefined = expression.parent;
+    while (ancestor && !ts.isSourceFile(ancestor)) {
+      if (isFunction(ancestor)) {
+        if (ancestor.parameters.some((parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === name)) {
+          return { callSite, targets: [], reason: 'ambiguous' };
+        }
+        if (ancestor.body) {
+          let shadowed = false;
+          const scan = (node: ts.Node): void => {
+            if (node !== ancestor!.body && isFunction(node)) return;
+            if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name) {
+              shadowed = true;
+            }
+            ts.forEachChild(node, scan);
+          };
+          scan(ancestor.body);
+          if (shadowed) return { callSite, targets: [], reason: 'ambiguous' };
+        }
+      }
+      ancestor = ancestor.parent;
+    }
     const candidates: ts.FunctionLikeDeclaration[] = [];
     const collect = (node: ts.Node): void => {
       if (ts.isFunctionDeclaration(node) && node.name?.text === name && node.body) {
