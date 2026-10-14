@@ -139,119 +139,114 @@ export function activate(context: vscode.ExtensionContext): void {
         context.subscriptions
       );
       const handler = (message: unknown): void => {
-          if (!isGraphViewMessage(message)) return;
-          if (message.type === 'node:expand') {
-            if (sourceDirty) return;
-            const session = expansionSession;
-            const node = session?.getGraph().nodes.find((item) => item.id === message.nodeId);
-            if (!session || !node?.source || node.kind !== 'call') return;
-            void (async () => {
-              try {
-                const resolved = await resolveCalledFunction(adapter, node.source!);
-                if (!resolved || expansionSession !== session) {
-                  if (expansionSession === session) {
-                    void vscode.window.showInformationMessage(
-                      'Visual Code Flow: call definition could not be resolved.'
-                    );
-                  }
-                  return;
-                }
-                const analysis = await adapter.analyzeFunction(resolved.request, resolved.symbol);
-                if (expansionSession !== session) return;
-                const outcome = session.expand(node.id, buildControlFlowGraph(analysis));
-                if (!outcome.ok) {
+        if (!isGraphViewMessage(message)) return;
+        if (message.type === 'node:expand') {
+          if (sourceDirty) return;
+          const session = expansionSession;
+          const node = session?.getGraph().nodes.find((item) => item.id === message.nodeId);
+          if (!session || !node?.source || node.kind !== 'call') return;
+          void (async () => {
+            try {
+              const resolved = await resolveCalledFunction(adapter, node.source!);
+              if (!resolved || expansionSession !== session) {
+                if (expansionSession === session) {
                   void vscode.window.showInformationMessage(
-                    `Visual Code Flow: cannot expand call (${outcome.reason}).`
+                    'Visual Code Flow: call definition could not be resolved.'
                   );
-                  return;
                 }
-                currentGraph = session.getGraph();
-                currentSourceMap = new SourceMapIndex(currentGraph);
-                refresh.watchGraph(currentGraph);
-                persist();
-                await panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
-                await panel?.webview.postMessage({
-                  type: 'expanded',
-                  nodeIds: session.expandedCalls
-                });
-              } catch (error) {
-                const details = error instanceof Error ? error.message : String(error);
-                void vscode.window.showErrorMessage(
-                  `Visual Code Flow expansion failed: ${details}`
-                );
+                return;
               }
-            })();
-            return;
-          }
-          if (message.type === 'node:collapse') {
-            if (sourceDirty) return;
-            if (!expansionSession?.collapse(message.nodeId!)) return;
-            currentGraph = expansionSession.getGraph();
-            currentSourceMap = new SourceMapIndex(currentGraph);
-            refresh.watchGraph(currentGraph);
-            persist();
-            void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
-            void panel?.webview.postMessage({
-              type: 'expanded',
-              nodeIds: expansionSession.expandedCalls
-            });
-            return;
-          }
-          if (message.type === 'node:selected') {
-            if (sourceDirty) return;
-            selectedGraphNodeId = message.nodeId;
-            persist();
-            const location = currentSourceMap?.getSource(message.nodeId!);
-            if (!location) return;
-            void (async () => {
-              try {
-                const document = await vscode.workspace.openTextDocument(
-                  vscode.Uri.parse(location.uri)
+              const analysis = await adapter.analyzeFunction(resolved.request, resolved.symbol);
+              if (expansionSession !== session) return;
+              const outcome = session.expand(node.id, buildControlFlowGraph(analysis));
+              if (!outcome.ok) {
+                void vscode.window.showInformationMessage(
+                  `Visual Code Flow: cannot expand call (${outcome.reason}).`
                 );
-                const editor = await vscode.window.showTextDocument(document, {
-                  viewColumn: sourceEditorColumn,
-                  preserveFocus: false,
-                  preview: false
-                });
-                const range = new vscode.Range(
-                  location.start.line,
-                  location.start.character,
-                  location.end.line,
-                  location.end.character
-                );
-                editor.selection = new vscode.Selection(range.start, range.end);
-                editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-                activeDecoration?.dispose();
-                activeDecoration = vscode.window.createTextEditorDecorationType({
-                  backgroundColor: new vscode.ThemeColor('editor.selectionHighlightBackground'),
-                  isWholeLine: false
-                });
-                editor.setDecorations(activeDecoration, [range]);
-              } catch (error) {
-                const details = error instanceof Error ? error.message : String(error);
-                void vscode.window.showErrorMessage(
-                  `Visual Code Flow navigation failed: ${details}`
-                );
+                return;
               }
-            })();
-          }
-          if (message.type === 'ready') {
-            void panel?.webview.postMessage({ type: 'status', message: currentStatus });
-            void panel?.webview.postMessage({
-              type: 'settings',
-              layoutDirection: readFlowSettings().layoutDirection
-            });
-            if (currentGraph)
-              void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
-            void panel?.webview.postMessage({
-              type: 'expanded',
-              nodeIds: expansionSession?.expandedCalls ?? []
-            });
-            void panel?.webview.postMessage({
-              type: 'node:highlight',
-              nodeId: selectedGraphNodeId
-            });
-          }
+              currentGraph = session.getGraph();
+              currentSourceMap = new SourceMapIndex(currentGraph);
+              refresh.watchGraph(currentGraph);
+              persist();
+              await panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
+              await panel?.webview.postMessage({
+                type: 'expanded',
+                nodeIds: session.expandedCalls
+              });
+            } catch (error) {
+              const details = error instanceof Error ? error.message : String(error);
+              void vscode.window.showErrorMessage(`Visual Code Flow expansion failed: ${details}`);
+            }
+          })();
+          return;
+        }
+        if (message.type === 'node:collapse') {
+          if (sourceDirty) return;
+          if (!expansionSession?.collapse(message.nodeId!)) return;
+          currentGraph = expansionSession.getGraph();
+          currentSourceMap = new SourceMapIndex(currentGraph);
+          refresh.watchGraph(currentGraph);
+          persist();
+          void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
+          void panel?.webview.postMessage({
+            type: 'expanded',
+            nodeIds: expansionSession.expandedCalls
+          });
+          return;
+        }
+        if (message.type === 'node:selected') {
+          if (sourceDirty) return;
+          selectedGraphNodeId = message.nodeId;
+          persist();
+          const location = currentSourceMap?.getSource(message.nodeId!);
+          if (!location) return;
+          void (async () => {
+            try {
+              const document = await vscode.workspace.openTextDocument(
+                vscode.Uri.parse(location.uri)
+              );
+              const editor = await vscode.window.showTextDocument(document, {
+                viewColumn: sourceEditorColumn,
+                preserveFocus: false,
+                preview: false
+              });
+              const range = new vscode.Range(
+                location.start.line,
+                location.start.character,
+                location.end.line,
+                location.end.character
+              );
+              editor.selection = new vscode.Selection(range.start, range.end);
+              editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+              activeDecoration?.dispose();
+              activeDecoration = vscode.window.createTextEditorDecorationType({
+                backgroundColor: new vscode.ThemeColor('editor.selectionHighlightBackground'),
+                isWholeLine: false
+              });
+              editor.setDecorations(activeDecoration, [range]);
+            } catch (error) {
+              const details = error instanceof Error ? error.message : String(error);
+              void vscode.window.showErrorMessage(`Visual Code Flow navigation failed: ${details}`);
+            }
+          })();
+        }
+        if (message.type === 'ready') {
+          void panel?.webview.postMessage({ type: 'status', message: currentStatus });
+          void panel?.webview.postMessage({
+            type: 'settings',
+            layoutDirection: readFlowSettings().layoutDirection
+          });
+          if (currentGraph) void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
+          void panel?.webview.postMessage({
+            type: 'expanded',
+            nodeIds: expansionSession?.expandedCalls ?? []
+          });
+          void panel?.webview.postMessage({
+            type: 'node:highlight',
+            nodeId: selectedGraphNodeId
+          });
+        }
       };
       testDispatch = handler;
       panel.webview.onDidReceiveMessage(handler, null, context.subscriptions);
