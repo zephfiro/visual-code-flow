@@ -12,6 +12,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import './styles.css';
+import { expansionAction } from './expansion-action.js';
 import type { FlowGraph, FlowNode } from '@visual-code-flow/flow-core';
 
 interface VsCodeBridge {
@@ -136,11 +137,8 @@ function FlowApp() {
   };
 
   const toggleExpansion = (node: FlowNode): void => {
-    if (!node.expandable) return;
-    bridge.postMessage({
-      type: expanded.has(node.id) ? 'node:collapse' : 'node:expand',
-      nodeId: node.id
-    });
+    const action = expansionAction(node, expanded);
+    if (action) bridge.postMessage(action);
   };
 
   const onNodeClick: NodeMouseHandler = (_, node) => chooseNode(node.id);
