@@ -8,7 +8,9 @@ assert.ok(existsSync(archive), 'VSIX must be generated before verification');
 
 const contents = execFileSync('unzip', ['-Z', '-1', archive], {
   encoding: 'utf8'
-}).trim().split('\n');
+})
+  .trim()
+  .split('\n');
 const required = [
   'extension/package.json',
   'extension/README.md',
@@ -39,4 +41,6 @@ assert.equal(manifest.name, 'visual-code-flow');
 assert.equal(manifest.version, '0.1.0');
 assert.equal(manifest.main, './dist/extension.cjs');
 
-console.log(`VSIX verified: ${contents.length} entries; ${required.length} required entries present.`);
+console.log(
+  `VSIX verified: ${contents.length} entries; ${required.length} required entries present.`
+);
