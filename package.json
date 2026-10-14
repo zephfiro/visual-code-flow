@@ -1,5 +1,5 @@
 {
-  "name": "visual-code-flow",
+  "name": "visual-code-flow-workspace",
   "version": "0.0.0",
   "private": true,
   "description": "Local-first interactive code flow explorer",
@@ -14,7 +14,9 @@
     "test": "npm run test --workspaces --if-present",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "format:check": "prettier --check .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "benchmark": "npm run build && node benchmarks/report.mjs",
+    "test:e2e": "npm run build && npm run test:e2e --workspace visual-code-flow"
   },
   "devDependencies": {
     "@eslint/js": "^9.25.0",
