@@ -14,4 +14,10 @@ jobs:
           node-version: '22'
       - run: npm install --no-audit --no-fund
       - run: npm run check
-      - run: npm run format:check
+      - name: Check formatting (show suggested changes on failure)
+        run: |
+          if ! npm run format:check; then
+            npm run format
+            git --no-pager diff -- .
+            exit 1
+          fi
