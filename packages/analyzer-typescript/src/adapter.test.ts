@@ -52,7 +52,10 @@ test('resolves a unique top-level function call', async () => {
 test('does not infer dynamic method calls or unknown names', async () => {
   const text = 'function main() { service.helper(); missing(); }';
   const request = { uri: 'file:///test.ts', text, languageId: 'typescript', documentVersion: 1 };
-  for (const [needle, reason] of [['service.helper()', 'dynamic'], ['missing()', 'not-found']]) {
+  for (const [needle, reason] of [
+    ['service.helper()', 'dynamic'],
+    ['missing()', 'not-found']
+  ] as const) {
     const start = text.indexOf(needle);
     const result = await adapter.resolveCall(request, {
       uri: request.uri,
