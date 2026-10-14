@@ -49,9 +49,12 @@ function nodeStyle(node: FlowNode): NonNullable<Node['style']> {
   };
 }
 
-function layoutGraph(graph: FlowGraph): { nodes: Node[]; edges: Edge[] } {
+function layoutGraph(
+  graph: FlowGraph,
+  direction: 'TB' | 'LR'
+): { nodes: Node[]; edges: Edge[] } {
   const layout = new dagre.graphlib.Graph();
-  layout.setGraph({ rankdir: 'TB', ranksep: 65, nodesep: 30 });
+  layout.setGraph({ rankdir: direction, ranksep: 65, nodesep: 30 });
   layout.setDefaultEdgeLabel(() => ({}));
 
   for (const node of graph.nodes) layout.setNode(node.id, { width: 215, height: 65 });
@@ -87,8 +90,12 @@ function FlowApp() {
   const [graph, setGraph] = useState<FlowGraph | undefined>();
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | undefined>();
   const [expandedNodeIds, setExpandedNodeIds] = useState<readonly string[]>([]);
+  const [layoutDirection, setLayoutDirection] = useState<'TB' | 'LR'>('TB');
   const bridge = useMemo(() => acquireVsCodeApi(), []);
-  const view = useMemo(() => (graph ? layoutGraph(graph) : undefined), [graph]);
+  const view = useMemo(
+    () => (graph ? layoutGraph(graph, layoutDirection) : undefined),
+    [graph, layoutDirection]
+  );
   const expanded = useMemo(() => new Set(expandedNodeIds), [expandedNodeIds]);
   const selectedNode = graph?.nodes.find((node) => node.id === highlightedNodeId);
   const highlightedNodes = useMemo(
@@ -108,6 +115,11 @@ function FlowApp() {
         setHighlightedNodeId(
           'nodeId' in data && typeof data.nodeId === 'string' ? data.nodeId : undefined
         );
+      }
+      if (data.type === 'settings' && 'layoutDirection' in data) {
+        if (data.layoutDirection === 'TB' || data.layoutDirection === 'LR') {
+          setLayoutDirection(data.layoutDirection);
+        }
       }
       if (data.type === 'status' && 'message' in data && typeof data.message === 'string') {
         setStatus(data.message);
