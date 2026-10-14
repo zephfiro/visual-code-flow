@@ -122,7 +122,9 @@ export function activate(context: vscode.ExtensionContext): void {
                 });
               } catch (error) {
                 const details = error instanceof Error ? error.message : String(error);
-                void vscode.window.showErrorMessage(`Visual Code Flow expansion failed: ${details}`);
+                void vscode.window.showErrorMessage(
+                  `Visual Code Flow expansion failed: ${details}`
+                );
               }
             })();
             return;
