@@ -1,6 +1,16 @@
-import type { AnalysisRequest, CallResolution, Cancellation, SourceSpan } from '@visual-code-flow/shared';
+import type {
+  AnalysisRequest,
+  CallResolution,
+  Cancellation,
+  SourceSpan
+} from '@visual-code-flow/shared';
 import { classFileCandidates, relativeProjectPath, type ComposerMap } from './composer.js';
-import { checkCancellation, PhpAnalysisError, PhpDocumentCache, type PhpDocument } from './document.js';
+import {
+  checkCancellation,
+  PhpAnalysisError,
+  PhpDocumentCache,
+  type PhpDocument
+} from './document.js';
 import { phpCallDependencies, phpCallReference, phpClasses, resolvePhpCall } from './symbols.js';
 
 export interface PhpFileHost {
@@ -10,14 +20,22 @@ export interface PhpFileHost {
   read(uri: string): Promise<AnalysisRequest | undefined>;
 }
 export interface PhpCallResolver {
-  resolve(document: PhpDocument, source: SourceSpan, cancellation?: Cancellation): Promise<CallResolution>;
+  resolve(
+    document: PhpDocument,
+    source: SourceSpan,
+    cancellation?: Cancellation
+  ): Promise<CallResolution>;
 }
 export interface PhpProjectLimits {
   readonly maxDocuments: number;
   readonly maxSourceLength: number;
   readonly maxDependencyRounds: number;
 }
-const DEFAULTS: PhpProjectLimits = { maxDocuments: 96, maxSourceLength: 4_000_000, maxDependencyRounds: 32 };
+const DEFAULTS: PhpProjectLimits = {
+  maxDocuments: 96,
+  maxSourceLength: 4_000_000,
+  maxDependencyRounds: 32
+};
 
 /**
  * Per-Composer-project, bounded, on-demand symbol index. Paths come exclusively
@@ -28,11 +46,16 @@ export class PhpProjectIndex implements PhpCallResolver {
   readonly limits: PhpProjectLimits;
   private readonly documents = new PhpDocumentCache();
 
-  constructor(readonly map: ComposerMap, private readonly host: PhpFileHost, limits: Partial<PhpProjectLimits> = {}) {
+  constructor(
+    readonly map: ComposerMap,
+    private readonly host: PhpFileHost,
+    limits: Partial<PhpProjectLimits> = {}
+  ) {
     this.limits = Object.freeze({ ...DEFAULTS, ...limits });
     for (const [key, value] of Object.entries(this.limits)) {
       const cap = key === 'maxSourceLength' ? 8_000_000 : key === 'maxDocuments' ? 256 : 64;
-      if (!Number.isSafeInteger(value) || value < 1 || value > cap) throw new RangeError('Invalid PHP project indexing limit.');
+      if (!Number.isSafeInteger(value) || value < 1 || value > cap)
+        throw new RangeError('Invalid PHP project indexing limit.');
     }
   }
 
@@ -42,15 +65,27 @@ export class PhpProjectIndex implements PhpCallResolver {
     else this.documents.clear();
   }
 
-  async resolve(document: PhpDocument, source: SourceSpan, cancellation?: Cancellation): Promise<CallResolution> {
+  async resolve(
+    document: PhpDocument,
+    source: SourceSpan,
+    cancellation?: Cancellation
+  ): Promise<CallResolution> {
     const generation = this.generation;
     const check = (): void => {
       checkCancellation(cancellation);
       if (this.generation !== generation) throw new PhpAnalysisError('cancelled');
     };
     check();
-    const unresolved = (reason: CallResolution['reason']): CallResolution => ({ callSite: source, targets: [], ...(reason ? { reason } : {}) });
-    if (this.map.incomplete || relativeProjectPath(this.map.root, document.request.uri) === undefined) return unresolved('unsupported');
+    const unresolved = (reason: CallResolution['reason']): CallResolution => ({
+      callSite: source,
+      targets: [],
+      ...(reason ? { reason } : {})
+    });
+    if (
+      this.map.incomplete ||
+      relativeProjectPath(this.map.root, document.request.uri) === undefined
+    )
+      return unresolved('unsupported');
     const loaded = new Map<string, PhpDocument>([[document.request.uri, document]]);
     const attempted = new Set<string>([document.request.uri]);
     const checkedNames = new Set<string>();
@@ -73,7 +108,8 @@ export class PhpProjectIndex implements PhpCallResolver {
         const kind = await this.host.stat(current);
         check();
         if (kind === 'missing') return false;
-        if (kind !== (final ? 'file' : 'directory')) throw new PhpAnalysisError('unsupported-document');
+        if (kind !== (final ? 'file' : 'directory'))
+          throw new PhpAnalysisError('unsupported-document');
         if (!final) {
           safeDirectories.add(current);
           current += encodeURIComponent(parts[i]!) + (i === parts.length - 1 ? '' : '/');
@@ -116,7 +152,9 @@ export class PhpProjectIndex implements PhpCallResolver {
     let completed = false;
     for (let round = 0; round < this.limits.maxDependencyRounds; round++) {
       check();
-      const names = phpCallDependencies(document, source, [...loaded.values()]).filter((name) => !checkedNames.has(name));
+      const names = phpCallDependencies(document, source, [...loaded.values()]).filter(
+        (name) => !checkedNames.has(name)
+      );
       if (!names.length) {
         completed = true;
         break;
@@ -132,7 +170,13 @@ export class PhpProjectIndex implements PhpCallResolver {
     const result = resolvePhpCall(document, source, documents);
     if (result.reason === 'not-found') {
       const reference = phpCallReference(document, source, documents);
-      if (reference.kind === 'method' && !phpClasses(documents).some((item) => reference.names.some((name) => item.name.toLowerCase() === name.toLowerCase()))) return unresolved('external');
+      if (
+        reference.kind === 'method' &&
+        !phpClasses(documents).some((item) =>
+          reference.names.some((name) => item.name.toLowerCase() === name.toLowerCase())
+        )
+      )
+        return unresolved('external');
     }
     return result;
   }

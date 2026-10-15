@@ -15,7 +15,7 @@ Interface declarations, multiple receiver types, duplicate class definitions, co
 
 ## Composer and workspace boundaries
 
-`parseComposerMap` reads JSON only. PSR-4 and `autoload-dev` mappings produce exact on-demand candidate paths; explicit `autoload.files` entries make application helpers discoverable. PSR-0 and classmap entries are reported but not indexed. No Composer scripts, generated PHP autoloaders, bootstrap code, environment files or PHP runtime are executed.
+`parseComposerMap` reads JSON only. PSR-4 and `autoload-dev` mappings produce exact on-demand candidate paths; explicit `autoload.files` entries make application helpers discoverable. PSR-0 and classmap entries are reported but not indexed. Since those competing maps can change which declaration wins, project resolution fails closed when they are present. Malformed supported sections also mark the map incomplete. No Composer scripts, generated PHP autoloaders, bootstrap code, environment files or PHP runtime are executed.
 
 `PhpProjectIndex` belongs to one Composer root. It reads candidate snapshots through an injected host, with open editor buffers taking precedence. The host must report symbolic links instead of silently following them. Every candidate path is checked component by component; traversal, encoded separators, different URI authorities and generated/private trees are rejected. This is a source-reading policy, not a guarantee against concurrent filesystem replacement by another process.
 

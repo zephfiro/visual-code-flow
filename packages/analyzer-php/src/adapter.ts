@@ -54,9 +54,7 @@ export class PhpLanguageAdapter implements LanguageAdapter {
       const start = document.source.offsetAt(fn.definition.start)!;
       const end = document.source.offsetAt(fn.definition.end)!;
       // Anonymous unbound closures are identified only by their declaration start.
-      return start === fn.start && end === fn.end
-        ? offset === start
-        : offset >= start && offset < end;
+      return start === fn.start && end === fn.end ? offset === start : offset >= start && offset < end;
     })?.descriptor;
   }
 

@@ -28,14 +28,22 @@ export function projectRootUri(uri: string): string {
 
 /** Reject traversal, absolute paths, encoded separators and generated/private trees. */
 export function projectFileUri(root: string, relative: string): string | undefined {
-  if (/^[\\/]|[:?#%]/.test(relative) || relative.includes('\\') || [...relative].some((character) => character.charCodeAt(0) < 32)) return undefined;
+  if (
+    /^[\\/]|[:?#%]/.test(relative) ||
+    relative.includes('\\') ||
+    [...relative].some((character) => character.charCodeAt(0) < 32)
+  )
+    return undefined;
   const parts = relative.split('/').filter((part) => part !== '' && part !== '.');
   if (
-    parts.some((part) => part === '..' || ['.git', 'node_modules', 'vendor'].includes(part.toLowerCase())) ||
+    parts.some(
+      (part) => part === '..' || ['.git', 'node_modules', 'vendor'].includes(part.toLowerCase())
+    ) ||
     parts[0]?.toLowerCase() === 'storage' ||
     (parts[0]?.toLowerCase() === 'bootstrap' && parts[1]?.toLowerCase() === 'cache') ||
     parts.some((part) => part.toLowerCase() === '.env' || part.toLowerCase().startsWith('.env.'))
-  ) return undefined;
+  )
+    return undefined;
   try {
     const base = projectRootUri(root);
     const url = new URL(parts.map(encodeURIComponent).join('/'), base);
@@ -74,15 +82,45 @@ export function parseComposerMap(root: string, text: string, includeDev = true):
     // Neither JSON parse errors nor source snippets leave this boundary.
   }
   if (!data) {
-    return { root: base, mappings, files: [], laravel: false, incomplete: true, diagnostics: ['Invalid Composer metadata.'] };
+    return {
+      root: base,
+      mappings,
+      files: [],
+      laravel: false,
+      incomplete: true,
+      diagnostics: ['Invalid Composer metadata.']
+    };
   }
   for (const section of [data.autoload, ...(includeDev ? [data['autoload-dev']] : [])]) {
     const autoload = RECORD(section);
-    if (!autoload) continue;
-    if (autoload['psr-0'] || autoload.classmap) diagnostics.push('PSR-0 and classmap autoload are not indexed.');
+    if (section === undefined) continue;
+    if (!autoload) {
+      incomplete = true;
+      diagnostics.push('Invalid Composer autoload section.');
+      continue;
+    }
+    if (autoload['psr-0'] || autoload.classmap) {
+      incomplete = true;
+      diagnostics.push('PSR-0 and classmap autoload are not indexed.');
+    }
     const psr4 = RECORD(autoload['psr-4']);
+    if (autoload['psr-4'] !== undefined && !psr4) {
+      incomplete = true;
+      diagnostics.push('Invalid Composer PSR-4 map.');
+    }
+    if (autoload.files !== undefined && !Array.isArray(autoload.files)) {
+      incomplete = true;
+      diagnostics.push('Invalid Composer files list.');
+    }
     for (const [prefix, value] of Object.entries(psr4 ?? {})) {
-      if (prefix && (!prefix.endsWith('\\') || !prefix.slice(0, -1).split('\\').every((part) => IDENTIFIER.test(part)))) {
+      if (
+        prefix &&
+        (!prefix.endsWith('\\') ||
+          !prefix
+            .slice(0, -1)
+            .split('\\')
+            .every((part) => IDENTIFIER.test(part)))
+      ) {
         incomplete = true;
         diagnostics.push('Invalid PSR-4 namespace prefix.');
         continue;
@@ -100,8 +138,17 @@ export function parseComposerMap(root: string, text: string, includeDev = true):
     if (Array.isArray(autoload.files)) {
       for (const path of autoload.files) {
         const uri = typeof path === 'string' ? projectFileUri(base, path) : undefined;
-        if (uri && uri.toLowerCase().endsWith('.php') && !uri.toLowerCase().endsWith('.blade.php') && files.size < 64) files.add(uri);
-        else { incomplete = true; diagnostics.push('A Composer files entry is unsupported or exceeds the indexing limit.'); }
+        if (
+          uri &&
+          uri.toLowerCase().endsWith('.php') &&
+          !uri.toLowerCase().endsWith('.blade.php') &&
+          files.size < 64
+        )
+          files.add(uri);
+        else {
+          incomplete = true;
+          diagnostics.push('A Composer files entry is unsupported or exceeds the indexing limit.');
+        }
       }
     }
   }
