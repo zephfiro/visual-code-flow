@@ -36,7 +36,7 @@ export class LiveFlowRefresh implements vscode.Disposable {
   private debounceMs = 400;
 
   constructor(
-    private readonly registry: LanguageAdapterRegistry,
+    private readonly adapters: LanguageAdapterRegistry,
     private readonly publish: (graph: FlowGraph, symbol: FunctionDescriptor) => void,
     private readonly status: (message: string) => void
   ) {}
@@ -46,9 +46,8 @@ export class LiveFlowRefresh implements vscode.Disposable {
   }
 
   setDebounceMs(milliseconds: number): void {
-    if (!Number.isSafeInteger(milliseconds) || milliseconds < 100 || milliseconds > 5000) {
+    if (!Number.isSafeInteger(milliseconds) || milliseconds < 100 || milliseconds > 5000)
       throw new RangeError('Refresh debounce must be between 100 and 5000 milliseconds');
-    }
     this.debounceMs = milliseconds;
   }
 
@@ -74,17 +73,14 @@ export class LiveFlowRefresh implements vscode.Disposable {
   watchGraph(graph: FlowGraph): void {
     this.watchedUris.clear();
     if (this.root) this.watchedUris.add(this.root.uri);
-    for (const node of graph.nodes) {
-      if (node.source) this.watchedUris.add(node.source.uri);
-    }
+    for (const node of graph.nodes) if (node.source) this.watchedUris.add(node.source.uri);
   }
 
   onDocumentChanged(event: vscode.TextDocumentChangeEvent, autoRefresh = true): boolean {
     const uri = event.document.uri.toString();
     if (!this.root || !this.watchedUris.has(uri)) return false;
-    if (uri === this.root.uri) {
+    if (uri === this.root.uri)
       this.root.anchorOffset = translateAnchorOffset(this.root.anchorOffset, event.contentChanges);
-    }
     this.cache.invalidateDocument(uri);
     if (autoRefresh) this.schedule();
     else {
@@ -94,6 +90,15 @@ export class LiveFlowRefresh implements vscode.Disposable {
     return true;
   }
 
+  /** Composer, routes and external file changes can invalidate unchanged root text. */
+  invalidateDependencies(autoRefresh = true): void {
+    this.cache.clear();
+    this.cancelPending();
+    if (!this.root) return;
+    if (autoRefresh) this.schedule();
+    else this.status('Project dependencies changed; reopen the flow before navigation or export.');
+  }
+
   requestRefresh(): void {
     if (this.root) this.schedule();
   }
@@ -101,7 +106,7 @@ export class LiveFlowRefresh implements vscode.Disposable {
   private schedule(): void {
     this.generation.invalidate();
     if (this.timer) clearTimeout(this.timer);
-    this.status('Source changed — updating flow…');
+    this.status('Source changed - updating flow...');
     const generation = this.generation.begin();
     this.timer = setTimeout(() => {
       this.timer = undefined;
@@ -115,16 +120,13 @@ export class LiveFlowRefresh implements vscode.Disposable {
     try {
       const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(root.uri));
       const request = requestFor(document);
-      const position = document.positionAt(Math.min(root.anchorOffset, document.getText().length));
-      const adapter = this.registry.get(document.languageId);
+      const position = document.positionAt(Math.min(root.anchorOffset, request.text.length));
+      const adapter = this.adapters.get(request.languageId);
       if (!adapter) {
-        this.status('The document language is no longer supported; keeping the last valid flow.');
+        this.status('The source language is no longer supported; keeping the last valid flow.');
         return;
       }
-      const symbol = adapter.findFunction(request, {
-        line: position.line,
-        character: position.character
-      });
+      const symbol = adapter.findFunction(request, position);
       if (!this.generation.isCurrent(generation)) return;
       if (!symbol || symbol.name !== root.name) {
         this.status('The original function could not be found; keeping the last valid flow.');
@@ -133,7 +135,7 @@ export class LiveFlowRefresh implements vscode.Disposable {
       const key = {
         uri: request.uri,
         version: request.documentVersion,
-        symbolId: `${document.languageId}:${symbol.symbolId}`
+        symbolId: `${request.languageId}:${symbol.symbolId}`
       };
       let graph = this.cache.get(key);
       if (!graph) {
@@ -147,12 +149,17 @@ export class LiveFlowRefresh implements vscode.Disposable {
         if (!this.generation.isCurrent(generation)) return;
         this.cache.set(key, graph);
       }
-      if (!this.generation.isCurrent(generation)) return;
+      if (
+        !this.generation.isCurrent(generation) ||
+        document.version !== request.documentVersion ||
+        document.getText() !== request.text
+      )
+        return;
       this.publish(graph, symbol);
       this.status(`Flow updated: ${symbol.name}`);
     } catch (error) {
       if (!this.generation.isCurrent(generation)) return;
-      const details = error instanceof Error ? error.message : String(error);
+      const details = error instanceof Error ? error.message : 'Analysis unavailable';
       this.status(`Unable to refresh: ${details}. Keeping the last valid flow.`);
     }
   }

@@ -37,7 +37,7 @@
       "editor/context": [
         {
           "command": "visualCodeFlow.openFlow",
-          "when": "editorLangId == typescript || editorLangId == javascript || editorLangId == typescriptreact || editorLangId == javascriptreact",
+          "when": "editorLangId == typescript || editorLangId == javascript || editorLangId == typescriptreact || editorLangId == javascriptreact || editorLangId == php",
           "group": "navigation@25"
         }
       ]
@@ -72,6 +72,12 @@
           ],
           "default": "TB",
           "description": "Graph layout: top-to-bottom or left-to-right."
+        },
+        "visualCodeFlow.php.useDefinitionProvider": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "Optionally enrich unresolved PHP declarations through installed VS Code definition providers. Dynamic and ambiguous calls remain blocked; provider results are navigation evidence, not runtime traces."
         }
       }
     }
@@ -85,6 +91,7 @@
   },
   "dependencies": {
     "@visual-code-flow/analyzer-typescript": "0.0.0",
+    "@visual-code-flow/analyzer-php": "0.0.0",
     "@visual-code-flow/flow-core": "0.0.0",
     "@visual-code-flow/exporter-mermaid": "0.0.0",
     "@visual-code-flow/shared": "0.0.0"

@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
-import { LanguageAdapterRegistry } from '@visual-code-flow/shared';
 import { TypeScriptLanguageAdapter } from '@visual-code-flow/analyzer-typescript';
+import { PhpAnalysisError, PhpLanguageAdapter } from '@visual-code-flow/analyzer-php';
+import {
+  LanguageAdapterRegistry,
+  type AnalysisRequest,
+  type Cancellation
+} from '@visual-code-flow/shared';
 import { exportMermaid } from '@visual-code-flow/exporter-mermaid';
 import {
   buildControlFlowGraph,
@@ -13,364 +18,420 @@ import { resolveCalledFunction } from './call-resolver.js';
 import { LiveFlowRefresh } from './live-refresh.js';
 import { readFlowSettings } from './settings.js';
 import { FlowSessionStore } from './session-store.js';
+import { PhpWorkspace, documentSnapshot } from './php-workspace.js';
 
 export const OPEN_FLOW_COMMAND = 'visualCodeFlow.openFlow';
 
-const adapters = new LanguageAdapterRegistry([new TypeScriptLanguageAdapter()]);
+/** A single panel owns its revisions. No obsolete asynchronous result can replace its state. */
+class FlowController implements vscode.Disposable {
+  private panel: vscode.WebviewPanel | undefined;
+  private status = 'Select a function to view its flow.';
+  private graph: FlowGraph | undefined;
+  private sourceMap: SourceMapIndex | undefined;
+  private expansion: FlowExpansionSession | undefined;
+  private sourceColumn = vscode.ViewColumn.One;
+  private decoration: vscode.TextEditorDecorationType | undefined;
+  private selectedId: string | undefined;
+  private dirty = false;
+  private revision = 0;
+  private rootUri: string | undefined;
+  private rootLanguage: string | undefined;
+  private saveDestination: vscode.Uri | undefined;
+  private readonly subscriptions: vscode.Disposable[] = [];
+  private readonly php = new PhpWorkspace();
+  private readonly phpAdapter = new PhpLanguageAdapter({}, this.php);
+  private readonly adapters = new LanguageAdapterRegistry([
+    new TypeScriptLanguageAdapter(),
+    this.phpAdapter
+  ]);
+  private readonly sessions: FlowSessionStore;
+  private readonly refresh: LiveFlowRefresh;
 
-export function activate(context: vscode.ExtensionContext): void {
-  let panel: vscode.WebviewPanel | undefined;
-  let currentStatus = 'Select a function to view its flow.';
-  let currentGraph: FlowGraph | undefined;
-  let currentSourceMap: SourceMapIndex | undefined;
-  let expansionSession: FlowExpansionSession | undefined;
-  let sourceEditorColumn: vscode.ViewColumn = vscode.ViewColumn.One;
-  let activeDecoration: vscode.TextEditorDecorationType | undefined;
-  let selectedGraphNodeId: string | undefined;
-  let sourceDirty = false;
-  let testDispatch: ((message: unknown) => void) | undefined;
-  let rootUri: string | undefined;
-  const sessionStore = new FlowSessionStore(context.workspaceState);
-
-  const refresh = new LiveFlowRefresh(
-    adapters,
-    (graph, symbol) => {
-      expansionSession = new FlowExpansionSession(graph, readFlowSettings().maxExpansionDepth);
-      currentGraph = expansionSession.getGraph();
-      currentSourceMap = new SourceMapIndex(currentGraph);
-      selectedGraphNodeId = undefined;
-      sourceDirty = false;
-      activeDecoration?.dispose();
-      activeDecoration = undefined;
-      refresh.watchGraph(currentGraph);
-      void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
-      void panel?.webview.postMessage({ type: 'expanded', nodeIds: [] });
-      void panel?.webview.postMessage({ type: 'node:highlight' });
-      currentStatus = `Flow updated: ${symbol.name}`;
-      persist();
-    },
-    (message) => {
-      currentStatus = message;
-      void panel?.webview.postMessage({ type: 'status', message });
+  constructor(private readonly context: vscode.ExtensionContext) {
+    this.sessions = new FlowSessionStore(context.workspaceState, async (uri, root) => {
+      const rootDocument = vscode.workspace.textDocuments.find(
+        (entry) => entry.uri.toString() === root
+      );
+      if (rootDocument?.languageId === 'php' && uri !== root) await this.php.assertReadable(uri);
+    });
+    this.refresh = new LiveFlowRefresh(
+      this.adapters,
+      (graph) => {
+        this.revision++;
+        this.expansion = new FlowExpansionSession(graph, readFlowSettings().maxExpansionDepth);
+        this.dirty = false;
+        this.selectedId = undefined;
+        this.decoration?.dispose();
+        this.decoration = undefined;
+        this.updateGraph();
+      },
+      (message) => this.setStatus(message)
+    );
+    this.refresh.setDebounceMs(readFlowSettings().refreshDebounceMs);
+    this.subscriptions.push(
+      this.php,
+      this.refresh,
+      vscode.commands.registerCommand(OPEN_FLOW_COMMAND, () => this.openFlow()),
+      vscode.workspace.onDidChangeTextDocument((event) => {
+        if (this.panel && this.refresh.onDocumentChanged(event, readFlowSettings().autoRefresh))
+          this.markDirty();
+      }),
+      this.php.onDidChange((uri) => {
+        if (
+          this.panel &&
+          this.rootUri &&
+          this.rootLanguage === 'php' &&
+          this.php.affects(this.rootUri, uri)
+        ) {
+          this.markDirty();
+          this.refresh.invalidateDependencies(readFlowSettings().autoRefresh);
+        }
+      }),
+      vscode.window.onDidChangeTextEditorSelection((event) => {
+        if (!this.panel || this.dirty || !this.sourceMap) return;
+        const position = event.selections[0]?.active;
+        if (!position) return;
+        const node = this.sourceMap.findNode(event.textEditor.document.uri.toString(), position);
+        if (node?.id === this.selectedId) return;
+        this.selectedId = node?.id;
+        this.post({ type: 'node:highlight', nodeId: this.selectedId });
+      }),
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (!event.affectsConfiguration('visualCodeFlow')) return;
+        const settings = readFlowSettings();
+        this.refresh.setDebounceMs(settings.refreshDebounceMs);
+        this.post({ type: 'settings', layoutDirection: settings.layoutDirection });
+        if (settings.autoRefresh && this.dirty) this.refresh.requestRefresh();
+        if (this.expansion && this.expansion.maxDepth !== settings.maxExpansionDepth) {
+          this.revision++;
+          const previous = this.expansion.snapshot();
+          this.expansion = new FlowExpansionSession(
+            this.expansion.root,
+            settings.maxExpansionDepth
+          );
+          this.expansion.restore(previous);
+          this.updateGraph();
+        }
+      })
+    );
+    if (context.extensionMode === vscode.ExtensionMode.Test) {
+      this.subscriptions.push(
+        vscode.commands.registerCommand('visualCodeFlow.__test.flushSession', () => this.persist()),
+        vscode.commands.registerCommand('visualCodeFlow.__test.inspect', () => ({
+          panel: !!this.panel,
+          graph: this.graph,
+          dirty: this.dirty,
+          status: this.status,
+          expandedIds: this.expansion?.expandedCalls ?? [],
+          selectedId: this.selectedId
+        })),
+        vscode.commands.registerCommand('visualCodeFlow.__test.dispatch', (message: unknown) =>
+          this.handle(message)
+        ),
+        // Native dialog replacement exists only in an Extension Development Test Host.
+        vscode.commands.registerCommand(
+          'visualCodeFlow.__test.chooseSaveDestination',
+          (uri: string) => {
+            this.saveDestination = vscode.Uri.parse(uri);
+          }
+        )
+      );
     }
-  );
+  }
 
-  const persist = (): void => {
-    if (!sourceDirty && rootUri && expansionSession) {
-      void sessionStore.save(rootUri, expansionSession, selectedGraphNodeId);
+  private post(message: unknown): void {
+    void this.panel?.webview.postMessage(message);
+  }
+  private setStatus(message: string): void {
+    this.status = message;
+    this.post({ type: 'status', message });
+  }
+  private markDirty(): void {
+    this.revision++;
+    this.dirty = true;
+    this.sessions.invalidate();
+  }
+  private token(revision: number): Cancellation {
+    const owner = this;
+    return {
+      get isCancellationRequested() {
+        return owner.revision !== revision;
+      }
+    };
+  }
+  private isSnapshotCurrent(request: AnalysisRequest): boolean {
+    const document = vscode.workspace.textDocuments.find(
+      (entry) => entry.uri.toString() === request.uri
+    );
+    return (
+      !!document &&
+      !document.isClosed &&
+      document.version === request.documentVersion &&
+      document.getText() === request.text
+    );
+  }
+  private report(error: unknown, php = this.rootLanguage === 'php'): void {
+    const message =
+      error instanceof PhpAnalysisError
+        ? error.message
+        : php
+          ? 'PHP operation unavailable; inspect project paths, exclusions and supported syntax.'
+          : error instanceof Error
+            ? error.message
+            : 'Operation failed.';
+    this.setStatus(`Visual Code Flow: ${message}`);
+    if (!this.panel) void vscode.window.showWarningMessage(this.status);
+  }
+  private async contextKey(uri: string, language: string): Promise<string | undefined> {
+    if (language !== 'php') return undefined;
+    return this.php.contextKey(uri);
+  }
+  private async persist(allowClosed = false): Promise<void> {
+    const session = this.expansion;
+    const uri = this.rootUri;
+    const language = this.rootLanguage;
+    const revision = this.revision;
+    if (this.dirty || !session || !uri || !language) return;
+    try {
+      const key = await this.contextKey(uri, language);
+      if (
+        this.dirty ||
+        (this.revision !== revision &&
+          !(allowClosed && this.revision === revision + 1 && !this.panel)) ||
+        this.expansion !== session
+      )
+        return;
+      await this.sessions.save(uri, session, this.selectedId, key);
+    } catch {
+      // Project metadata can be inaccessible; local analysis still remains usable.
     }
-  };
+  }
+  private publish(): void {
+    this.post({ type: 'status', message: this.status });
+    this.post({ type: 'settings', layoutDirection: readFlowSettings().layoutDirection });
+    if (this.graph) this.post({ type: 'graph', graph: this.graph });
+    this.post({ type: 'expanded', nodeIds: this.expansion?.expandedCalls ?? [] });
+    this.post({ type: 'node:highlight', nodeId: this.selectedId });
+  }
+  private updateGraph(): void {
+    if (!this.expansion) return;
+    this.graph = this.expansion.getGraph();
+    this.sourceMap = new SourceMapIndex(this.graph);
+    this.refresh.watchGraph(this.graph);
+    this.publish();
+    void this.persist();
+  }
 
-  refresh.setDebounceMs(readFlowSettings().refreshDebounceMs);
-
-  const openFlow = vscode.commands.registerCommand(OPEN_FLOW_COMMAND, async () => {
+  async openFlow(): Promise<void> {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
       await vscode.window.showInformationMessage('Open a source file to explore its flow.');
       return;
     }
-
-    refresh.cancelPending();
-    sessionStore.invalidate();
-    sourceEditorColumn = editor.viewColumn ?? vscode.ViewColumn.One;
     const document = editor.document;
-    const adapter = adapters.get(document.languageId);
-    if (!adapter) {
-      await vscode.window.showWarningMessage(
-        `Visual Code Flow supports: ${adapters.supportedLanguages.join(', ')}.`
+    const adapter = this.adapters.get(document.languageId);
+    if (!adapter || document.uri.path.toLowerCase().endsWith('.blade.php')) {
+      this.setStatus(
+        'Supported: TypeScript, JavaScript and PHP functions. Blade templates are not supported.'
       );
+      void vscode.window.showInformationMessage(this.status);
       return;
     }
-
-    const selected = adapter.findFunction(
-      {
-        uri: document.uri.toString(),
-        text: document.getText(),
-        documentVersion: document.version,
-        languageId: document.languageId
-      },
-      {
-        line: editor.selection.active.line,
-        character: editor.selection.active.character
-      }
-    );
-
-    if (!selected) {
-      await vscode.window.showInformationMessage('Place your cursor inside a function.');
-      return;
-    }
-
-    currentStatus = `Selected function: ${selected.name} (line ${selected.location.start.line + 1})`;
+    const revision = ++this.revision;
+    this.refresh.cancelPending();
+    this.sessions.invalidate();
+    const request = documentSnapshot(document);
+    const token = this.token(revision);
     try {
-      const analysis = await adapter.analyzeFunction(
-        {
-          uri: document.uri.toString(),
-          text: document.getText(),
-          documentVersion: document.version,
-          languageId: document.languageId
-        },
-        selected
-      );
+      const selected = adapter.findFunction(request, editor.selection.active);
+      if (!selected) {
+        this.setStatus('Place your cursor inside a function or method with a body.');
+        void vscode.window.showInformationMessage(this.status);
+        return;
+      }
+      const analysis = await adapter.analyzeFunction(request, selected, token);
+      if (token.isCancellationRequested || !this.isSnapshotCurrent(request)) return;
       const graph = buildControlFlowGraph(analysis);
-      const nextSession = new FlowExpansionSession(graph, readFlowSettings().maxExpansionDepth);
-      const previous = await sessionStore.restore(document.uri.toString(), graph);
-      if (previous) nextSession.restore(previous.expansions);
-      expansionSession = nextSession;
-      currentGraph = expansionSession.getGraph();
-      rootUri = document.uri.toString();
-      refresh.track(document, selected, graph);
-      refresh.watchGraph(currentGraph);
-      sourceDirty = false;
-      currentSourceMap = new SourceMapIndex(currentGraph);
-      selectedGraphNodeId = previous?.selectedNodeId;
-      persist();
+      const session = new FlowExpansionSession(graph, readFlowSettings().maxExpansionDepth);
+      let restored: Awaited<ReturnType<FlowSessionStore['restore']>> = undefined;
+      try {
+        const key = await this.contextKey(request.uri, request.languageId);
+        restored = await this.sessions.restore(request.uri, graph, key);
+      } catch {
+        /* Do not restore sessions when project metadata is unavailable. */
+      }
+      if (token.isCancellationRequested || !this.isSnapshotCurrent(request)) return;
+      if (restored) session.restore(restored.expansions);
+      this.expansion = session;
+      this.rootUri = request.uri;
+      this.rootLanguage = request.languageId;
+      this.sourceColumn = editor.viewColumn ?? vscode.ViewColumn.One;
+      this.selectedId = restored?.selectedNodeId;
+      this.dirty = false;
+      this.decoration?.dispose();
+      this.decoration = undefined;
+      this.refresh.track(document, selected, graph);
+      if (!this.panel) {
+        const panel = createGraphWebview(this.context);
+        this.panel = panel;
+        this.subscriptions.push(
+          panel.onDidDispose(() => {
+            if (this.panel !== panel) return;
+            void this.persist(true);
+            this.panel = undefined;
+            this.revision++;
+            this.refresh.cancelPending();
+          }),
+          panel.webview.onDidReceiveMessage((message: unknown) => {
+            void this.handle(message).catch((error: unknown) => this.report(error));
+          })
+        );
+      } else this.panel.reveal(vscode.ViewColumn.Beside, true);
+      this.setStatus(
+        `Selected function: ${selected.name} (line ${selected.location.start.line + 1})`
+      );
+      this.updateGraph();
     } catch (error) {
-      const details = error instanceof Error ? error.message : String(error);
-      await vscode.window.showErrorMessage(`Visual Code Flow: ${details}`);
-      return;
+      if (!token.isCancellationRequested) this.report(error, request.languageId === 'php');
     }
-    if (!panel) {
-      panel = createGraphWebview(context);
-      panel.onDidDispose(
-        () => {
-          persist();
-          panel = undefined;
-          testDispatch = undefined;
-          refresh.cancelPending();
-        },
-        null,
-        context.subscriptions
-      );
-      const handler = (message: unknown): void => {
-        if (!isGraphViewMessage(message)) return;
-        if (message.type === 'diagram:copy' || message.type === 'diagram:save') {
-          if (!currentGraph || sourceDirty) {
-            void vscode.window.showWarningMessage(
-              'Visual Code Flow: refresh the diagram before exporting.'
-            );
-            return;
-          }
-          const diagram = exportMermaid(currentGraph);
-          void (async () => {
-            try {
-              if (message.type === 'diagram:copy') {
-                await vscode.env.clipboard.writeText(diagram);
-                void vscode.window.showInformationMessage('Mermaid diagram copied to clipboard.');
-                return;
-              }
-              const destination = await vscode.window.showSaveDialog({
-                filters: { Mermaid: ['mmd'] },
-                saveLabel: 'Save Mermaid Diagram'
-              });
-              if (!destination) return;
-              await vscode.workspace.fs.writeFile(destination, new TextEncoder().encode(diagram));
-              void vscode.window.showInformationMessage('Mermaid diagram saved.');
-            } catch (error) {
-              const details = error instanceof Error ? error.message : String(error);
-              void vscode.window.showErrorMessage(`Mermaid export failed: ${details}`);
-            }
-          })();
-          return;
-        }
-        if (message.type === 'node:expand') {
-          if (sourceDirty) return;
-          const session = expansionSession;
-          const node = session?.getGraph().nodes.find((item) => item.id === message.nodeId);
-          if (!session || !node?.source || node.kind !== 'call') return;
-          void (async () => {
-            try {
-              const resolved = await resolveCalledFunction(adapters, node.source!);
-              if (!resolved || expansionSession !== session) {
-                if (expansionSession === session) {
-                  void vscode.window.showInformationMessage(
-                    'Visual Code Flow: call definition could not be resolved.'
-                  );
-                }
-                return;
-              }
-              const analysis = await resolved.adapter.analyzeFunction(
-                resolved.request,
-                resolved.symbol
-              );
-              if (expansionSession !== session) return;
-              const outcome = session.expand(node.id, buildControlFlowGraph(analysis));
-              if (!outcome.ok) {
-                void vscode.window.showInformationMessage(
-                  `Visual Code Flow: cannot expand call (${outcome.reason}).`
-                );
-                return;
-              }
-              currentGraph = session.getGraph();
-              currentSourceMap = new SourceMapIndex(currentGraph);
-              refresh.watchGraph(currentGraph);
-              persist();
-              await panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
-              await panel?.webview.postMessage({
-                type: 'expanded',
-                nodeIds: session.expandedCalls
-              });
-            } catch (error) {
-              const details = error instanceof Error ? error.message : String(error);
-              void vscode.window.showErrorMessage(`Visual Code Flow expansion failed: ${details}`);
-            }
-          })();
-          return;
-        }
-        if (message.type === 'node:collapse') {
-          if (sourceDirty) return;
-          if (!expansionSession?.collapse(message.nodeId!)) return;
-          currentGraph = expansionSession.getGraph();
-          currentSourceMap = new SourceMapIndex(currentGraph);
-          refresh.watchGraph(currentGraph);
-          persist();
-          void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
-          void panel?.webview.postMessage({
-            type: 'expanded',
-            nodeIds: expansionSession?.expandedCalls ?? []
-          });
-          return;
-        }
-        if (message.type === 'node:selected') {
-          if (sourceDirty) return;
-          selectedGraphNodeId = message.nodeId;
-          persist();
-          const location = currentSourceMap?.getSource(message.nodeId!);
-          if (!location) return;
-          void (async () => {
-            try {
-              const document = await vscode.workspace.openTextDocument(
-                vscode.Uri.parse(location.uri)
-              );
-              const editor = await vscode.window.showTextDocument(document, {
-                viewColumn: sourceEditorColumn,
-                preserveFocus: false,
-                preview: false
-              });
-              const range = new vscode.Range(
-                location.start.line,
-                location.start.character,
-                location.end.line,
-                location.end.character
-              );
-              editor.selection = new vscode.Selection(range.start, range.end);
-              editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-              activeDecoration?.dispose();
-              activeDecoration = vscode.window.createTextEditorDecorationType({
-                backgroundColor: new vscode.ThemeColor('editor.selectionHighlightBackground'),
-                isWholeLine: false
-              });
-              editor.setDecorations(activeDecoration, [range]);
-            } catch (error) {
-              const details = error instanceof Error ? error.message : String(error);
-              void vscode.window.showErrorMessage(`Visual Code Flow navigation failed: ${details}`);
-            }
-          })();
-        }
-        if (message.type === 'ready') {
-          void panel?.webview.postMessage({ type: 'status', message: currentStatus });
-          void panel?.webview.postMessage({
-            type: 'settings',
-            layoutDirection: readFlowSettings().layoutDirection
-          });
-          if (currentGraph) void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
-          void panel?.webview.postMessage({
-            type: 'expanded',
-            nodeIds: expansionSession?.expandedCalls ?? []
-          });
-          void panel?.webview.postMessage({
-            type: 'node:highlight',
-            nodeId: selectedGraphNodeId
-          });
-        }
-      };
-      testDispatch = handler;
-      panel.webview.onDidReceiveMessage(handler, null, context.subscriptions);
-    } else {
-      panel.reveal(vscode.ViewColumn.Beside, true);
-    }
-    await panel.webview.postMessage({ type: 'status', message: currentStatus });
-    await panel.webview.postMessage({
-      type: 'settings',
-      layoutDirection: readFlowSettings().layoutDirection
-    });
-    await panel.webview.postMessage({ type: 'graph', graph: currentGraph });
-    await panel.webview.postMessage({
-      type: 'expanded',
-      nodeIds: expansionSession?.expandedCalls ?? []
-    });
-    await panel.webview.postMessage({ type: 'node:highlight', nodeId: selectedGraphNodeId });
-  });
-
-  const changeListener = vscode.workspace.onDidChangeTextDocument((event) => {
-    if (!panel) return;
-    if (refresh.onDocumentChanged(event, readFlowSettings().autoRefresh)) {
-      sourceDirty = true;
-      sessionStore.invalidate();
-    }
-  });
-
-  const selectionListener = vscode.window.onDidChangeTextEditorSelection((event) => {
-    if (!panel || !currentSourceMap) return;
-    const node = currentSourceMap.findNode(event.textEditor.document.uri.toString(), {
-      line: event.selections[0]?.active.line ?? 0,
-      character: event.selections[0]?.active.character ?? 0
-    });
-    if (node?.id === selectedGraphNodeId) return;
-    selectedGraphNodeId = node?.id;
-    void panel.webview.postMessage({ type: 'node:highlight', nodeId: selectedGraphNodeId });
-  });
-
-  const configListener = vscode.workspace.onDidChangeConfiguration((event) => {
-    if (!event.affectsConfiguration('visualCodeFlow')) return;
-    const settings = readFlowSettings();
-    refresh.setDebounceMs(settings.refreshDebounceMs);
-    void panel?.webview.postMessage({
-      type: 'settings',
-      layoutDirection: settings.layoutDirection
-    });
-    if (settings.autoRefresh && sourceDirty) refresh.requestRefresh();
-    if (expansionSession && expansionSession.maxDepth !== settings.maxExpansionDepth) {
-      const saved = expansionSession.snapshot();
-      expansionSession = new FlowExpansionSession(
-        expansionSession.root,
-        settings.maxExpansionDepth
-      );
-      expansionSession.restore(saved);
-      currentGraph = expansionSession.getGraph();
-      currentSourceMap = new SourceMapIndex(currentGraph);
-      refresh.watchGraph(currentGraph);
-      void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
-      void panel?.webview.postMessage({
-        type: 'expanded',
-        nodeIds: expansionSession.expandedCalls
-      });
-      persist();
-    }
-  });
-
-  if (context.extensionMode === vscode.ExtensionMode.Test) {
-    context.subscriptions.push(
-      vscode.commands.registerCommand('visualCodeFlow.__test.inspect', () => ({
-        panel: Boolean(panel),
-        graph: currentGraph,
-        dirty: sourceDirty,
-        status: currentStatus,
-        expandedIds: expansionSession?.expandedCalls ?? []
-      })),
-      vscode.commands.registerCommand('visualCodeFlow.__test.dispatch', (message: unknown) => {
-        testDispatch?.(message);
-      })
-    );
   }
 
-  context.subscriptions.push(refresh, changeListener, selectionListener, configListener, openFlow, {
-    dispose: () => {
-      activeDecoration?.dispose();
-      panel?.dispose();
+  private async handle(message: unknown): Promise<void> {
+    if (!isGraphViewMessage(message)) return;
+    if (message.type === 'ready') {
+      this.publish();
+      return;
     }
-  });
+    if (!this.panel || !this.graph || this.dirty) {
+      this.setStatus('Refresh the flow before navigation, expansion or export.');
+      return;
+    }
+    const revision = this.revision;
+    const token = this.token(revision);
+    const session = this.expansion;
+    if (message.type === 'diagram:copy' || message.type === 'diagram:save') {
+      const diagram = exportMermaid(this.graph);
+      if (message.type === 'diagram:copy') {
+        await vscode.env.clipboard.writeText(diagram);
+        return;
+      }
+      const destination =
+        this.context.extensionMode === vscode.ExtensionMode.Test && this.saveDestination
+          ? this.saveDestination
+          : await vscode.window.showSaveDialog({
+              filters: { Mermaid: ['mmd'] },
+              saveLabel: 'Save Mermaid Diagram'
+            });
+      this.saveDestination = undefined;
+      if (!destination || token.isCancellationRequested || this.dirty) return;
+      await vscode.workspace.fs.writeFile(destination, new TextEncoder().encode(diagram));
+      return;
+    }
+    if (!session) return;
+    if (message.type === 'node:collapse') {
+      if (session.collapse(message.nodeId!)) {
+        this.revision++;
+        this.updateGraph();
+      }
+      return;
+    }
+    if (message.type === 'node:expand') {
+      const node = this.graph.nodes.find((item) => item.id === message.nodeId);
+      if (!node?.source || node.kind !== 'call') return;
+      try {
+        const resolved = await resolveCalledFunction(
+          this.adapters,
+          node.source,
+          token,
+          this.php,
+          (reason) => {
+            if (!token.isCancellationRequested)
+              this.setStatus(`Call not expanded: ${reason}. No runtime target was guessed.`);
+          }
+        );
+        if (!resolved || token.isCancellationRequested || this.dirty || this.expansion !== session)
+          return;
+        const analysis = await resolved.adapter.analyzeFunction(
+          resolved.request,
+          resolved.symbol,
+          token
+        );
+        if (
+          token.isCancellationRequested ||
+          !this.isSnapshotCurrent(resolved.request) ||
+          this.dirty ||
+          this.expansion !== session
+        )
+          return;
+        const evidence =
+          resolved.evidence ??
+          'Source declaration; expansion is navigation, not an execution trace.';
+        const outcome = session.expand(
+          node.id,
+          buildControlFlowGraph({ ...analysis, diagnostics: [...analysis.diagnostics, evidence] })
+        );
+        if (!outcome.ok) {
+          this.setStatus(`Cannot expand call: ${outcome.reason}.`);
+          return;
+        }
+        this.setStatus(`Expanded ${resolved.symbol.name}. ${evidence}`);
+        this.updateGraph();
+      } catch (error) {
+        if (!token.isCancellationRequested) this.report(error);
+      }
+      return;
+    }
+    if (message.type === 'node:selected') {
+      const location = this.sourceMap?.getSource(message.nodeId!);
+      if (!location) return;
+      try {
+        if (this.rootLanguage === 'php' && location.uri !== this.rootUri)
+          await this.php.assertReadable(location.uri);
+        if (token.isCancellationRequested) return;
+        const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(location.uri));
+        if (token.isCancellationRequested || this.dirty) return;
+        const editor = await vscode.window.showTextDocument(document, {
+          viewColumn: this.sourceColumn,
+          preserveFocus: false,
+          preview: false
+        });
+        if (token.isCancellationRequested || this.dirty) return;
+        const range = new vscode.Range(
+          location.start.line,
+          location.start.character,
+          location.end.line,
+          location.end.character
+        );
+        editor.selection = new vscode.Selection(range.start, range.end);
+        editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+        this.decoration?.dispose();
+        this.decoration = vscode.window.createTextEditorDecorationType({
+          backgroundColor: new vscode.ThemeColor('editor.selectionHighlightBackground'),
+          isWholeLine: false
+        });
+        editor.setDecorations(this.decoration, [range]);
+        this.selectedId = message.nodeId;
+        void this.persist();
+      } catch (error) {
+        if (!token.isCancellationRequested) this.report(error);
+      }
+    }
+  }
+
+  dispose(): void {
+    this.revision++;
+    this.sessions.invalidate();
+    this.decoration?.dispose();
+    this.panel?.dispose();
+    for (const subscription of this.subscriptions) subscription.dispose();
+    this.phpAdapter.documents.clear();
+  }
+}
+
+export function activate(context: vscode.ExtensionContext): void {
+  context.subscriptions.push(new FlowController(context));
 }
 
 export function deactivate(): void {
-  // ExtensionContext owns registered listeners and panels.
+  // ExtensionContext disposes the controller and every owned resource.
 }
