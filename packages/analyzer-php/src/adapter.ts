@@ -1,3 +1,4 @@
+import { PhpStatementExtractor } from './statements.js';
 import type {
   AnalysisRequest,
   AnalysisResult,
@@ -63,19 +64,7 @@ export class PhpLanguageAdapter implements LanguageAdapter {
     const fn = document.functions.find((item) => item.descriptor.symbolId === symbol.symbolId);
     if (!fn || symbol.location.uri !== request.uri) throw new PhpAnalysisError('stale-symbol');
     checkCancellation(cancellation);
-    // Function discovery is delivered separately from the PHP CFG implementation.
-    return {
-      function: fn.descriptor,
-      statements: [
-        {
-          id: `${symbol.symbolId}:pending`,
-          kind: 'unsupported',
-          label: 'PHP statement analysis pending',
-          location: fn.descriptor.body
-        }
-      ],
-      diagnostics: ['PHP control-flow extraction is not implemented in this delivery.']
-    };
+    return new PhpStatementExtractor(document, fn, cancellation).analyze();
   }
 
   async resolveCall(

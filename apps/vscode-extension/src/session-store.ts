@@ -11,7 +11,7 @@ const MAX_DOCUMENTS = 24;
 const MAX_SNAPSHOT_BYTES = 750_000;
 
 export interface StoredFlowSession {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly rootUri: string;
   readonly rootSymbolId: string;
   readonly sourceHashes: Readonly<Record<string, string>>;
@@ -55,7 +55,7 @@ export class FlowSessionStore {
     }
     if (generation !== this.generation) return;
     const saved: StoredFlowSession = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       rootUri,
       rootSymbolId: session.root.rootSymbolId,
       sourceHashes,
@@ -70,7 +70,7 @@ export class FlowSessionStore {
     const stored = this.workspaceState.get<StoredFlowSession>(STORAGE_KEY);
     if (
       !stored ||
-      stored.schemaVersion !== 1 ||
+      stored.schemaVersion !== 2 ||
       stored.rootUri !== rootUri ||
       stored.rootSymbolId !== root.rootSymbolId ||
       !stored.expansions ||

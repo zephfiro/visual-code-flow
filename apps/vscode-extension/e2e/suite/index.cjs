@@ -55,7 +55,7 @@ async function run() {
       assert.ok(state?.panel, 'Webview panel should be open');
       assert.ok(state?.graph);
     });
-    assert.equal(state.graph.schemaVersion, 1);
+    assert.equal(state.graph.schemaVersion, 2);
     assert.ok(state.graph.nodes.some((node) => node.kind === 'condition'));
     const callNode = state.graph.nodes.find((node) => node.kind === 'call');
     assert.ok(callNode, 'Variable initializer call must be represented as a call node');

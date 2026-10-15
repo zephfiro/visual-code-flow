@@ -4,7 +4,7 @@ import type { FlowGraph } from './model.js';
 import { SourceMapIndex } from './source-map.js';
 
 const graph: FlowGraph = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   rootSymbolId: 'method',
   nodes: [
     {

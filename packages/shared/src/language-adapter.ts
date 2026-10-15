@@ -21,12 +21,62 @@ export type StatementKind =
   | 'sequence'
   | 'branch'
   | 'loop'
+  | 'selection'
+  | 'try'
+  | 'exit'
   | 'call'
   | 'return'
   | 'throw'
   | 'break'
   | 'continue'
   | 'unsupported';
+
+export type ConditionDescriptor =
+  | {
+      readonly kind: 'test';
+      readonly id: string;
+      readonly label: string;
+      readonly location: SourceSpan;
+      readonly evaluation?: readonly StatementDescriptor[];
+      readonly constant?: boolean;
+      readonly mayThrow?: boolean;
+    }
+  | {
+      readonly kind: 'and' | 'or';
+      readonly left: ConditionDescriptor;
+      readonly right: ConditionDescriptor;
+    }
+  | { readonly kind: 'not'; readonly operand: ConditionDescriptor }
+  | {
+      readonly kind: 'choice';
+      readonly test: ConditionDescriptor;
+      readonly whenTrue: ConditionDescriptor;
+      readonly whenFalse: ConditionDescriptor;
+    };
+
+export interface SelectionArm {
+  readonly id: string;
+  readonly label: string;
+  readonly location: SourceSpan;
+  readonly tests: readonly ConditionDescriptor[];
+  readonly body: readonly StatementDescriptor[];
+  readonly isDefault?: boolean;
+}
+
+export interface CatchDescriptor {
+  readonly id: string;
+  readonly label: string;
+  readonly location: SourceSpan;
+  readonly body: readonly StatementDescriptor[];
+  readonly catchesAll?: boolean;
+}
+
+export interface StatementReference {
+  readonly id: string;
+  readonly label: string;
+  readonly location: SourceSpan;
+  readonly reason: string;
+}
 
 export interface StatementDescriptor {
   readonly id: string;
@@ -35,6 +85,26 @@ export interface StatementDescriptor {
   readonly location: SourceSpan;
   readonly children?: readonly StatementDescriptor[];
   readonly alternate?: readonly StatementDescriptor[];
+  readonly condition?: ConditionDescriptor;
+  readonly initialization?: readonly StatementDescriptor[];
+  readonly update?: readonly StatementDescriptor[];
+  readonly loopMode?: 'pretest' | 'posttest';
+  readonly jumpLevel?: number;
+  readonly mayThrow?: boolean;
+  readonly terminal?: boolean;
+  readonly selection?: {
+    readonly arms: readonly SelectionArm[];
+    readonly fallthrough: boolean;
+    readonly breakable: boolean;
+    readonly countForContinue: boolean;
+    readonly unmatched: 'normal' | 'throw';
+  };
+  readonly handlers?: readonly CatchDescriptor[];
+  readonly finalizer?: {
+    readonly location: SourceSpan;
+    readonly statements: readonly StatementDescriptor[];
+  };
+  readonly references?: readonly StatementReference[];
 }
 
 export interface CallTarget {
