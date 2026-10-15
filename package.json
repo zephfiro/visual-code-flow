@@ -8,9 +8,9 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @visual-code-flow/shared && npm run build -w @visual-code-flow/flow-core && npm run build -w @visual-code-flow/analyzer-typescript && npm run build -w @visual-code-flow/exporter-mermaid && npm run build -w @visual-code-flow/renderer-react && npm run build -w visual-code-flow",
+    "build": "npm run build -w @visual-code-flow/shared && npm run build -w @visual-code-flow/flow-core && npm run build -w @visual-code-flow/analyzer-typescript && npm run build -w @visual-code-flow/analyzer-php && npm run build -w @visual-code-flow/exporter-mermaid && npm run build -w @visual-code-flow/renderer-react && npm run build -w visual-code-flow",
     "lint": "eslint .",
-    "typecheck": "npm run build -w @visual-code-flow/shared && npm run build -w @visual-code-flow/flow-core && npm run build -w @visual-code-flow/analyzer-typescript && npm run build -w @visual-code-flow/exporter-mermaid && npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run build -w @visual-code-flow/shared && npm run build -w @visual-code-flow/flow-core && npm run build -w @visual-code-flow/analyzer-typescript && npm run build -w @visual-code-flow/analyzer-php && npm run build -w @visual-code-flow/exporter-mermaid && npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "format:check": "prettier --check .",
