@@ -1,0 +1,12 @@
+{
+  "name": "@visual-code-flow/analyzer-php",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "php-parser": "3.7.0"
+  }
+}
