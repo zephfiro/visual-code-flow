@@ -28,7 +28,7 @@ export function projectRootUri(uri: string): string {
 
 /** Reject traversal, absolute paths, encoded separators and generated/private trees. */
 export function projectFileUri(root: string, relative: string): string | undefined {
-  if (/^[\\/]|[:?#%\u0000-\u001f]/.test(relative) || relative.includes('\\')) return undefined;
+  if (/^[\\/]|[:?#%]/.test(relative) || relative.includes('\\') || [...relative].some((character) => character.charCodeAt(0) < 32)) return undefined;
   const parts = relative.split('/').filter((part) => part !== '' && part !== '.');
   if (
     parts.some((part) => part === '..' || ['.git', 'node_modules', 'vendor'].includes(part.toLowerCase())) ||

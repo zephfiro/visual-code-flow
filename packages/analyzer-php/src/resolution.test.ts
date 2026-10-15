@@ -162,9 +162,10 @@ test('symlinks, parser failures and size limits fail closed', async () => {
 
 test('a generation change cancels a pending resolution', async () => {
   const f = projectFixture();
-  let index: PhpProjectIndex;
-  const host: PhpFileHost = { ...f.host, async read(uri) { index.invalidate(); return f.files.get(uri); } };
-  index = new PhpProjectIndex(f.map, host);
+  const index = new PhpProjectIndex(f.map, {
+    ...f.host,
+    async read(uri) { index.invalidate(); return f.files.get(uri); }
+  });
   await assert.rejects(index.resolve(f.caller, f.source), (error: unknown) => error instanceof Error && error.message === 'PHP analysis was cancelled.');
 });
 
