@@ -96,7 +96,10 @@ test('source offsets index JavaScript UTF-16 strings with Unicode and CRLF', () 
   assert.equal(fn.loc.start.line, 3);
   assert.equal(fn.loc.start.column, 0);
   assert.equal(statement.loc.start.offset, text.indexOf('return'));
-  assert.equal(text.slice(statement.loc.start.offset, statement.loc.end.offset), 'return "ação😀";');
+  assert.equal(
+    text.slice(statement.loc.start.offset, statement.loc.end.offset),
+    'return "ação😀";'
+  );
 });
 
 test('incomplete PHP is rejected rather than silently publishing a partial graph', () => {
@@ -104,6 +107,8 @@ test('incomplete PHP is rejected rather than silently publishing a partial graph
 });
 
 test('abstract/interface methods are distinguishable from executable bodies', () => {
-  const ast = parse('<?php interface A { function call(); } abstract class B { abstract function run(); }');
+  const ast = parse(
+    '<?php interface A { function call(); } abstract class B { abstract function run(); }'
+  );
   for (const method of nodes(ast, 'method')) assert.equal(method.body, null);
 });
