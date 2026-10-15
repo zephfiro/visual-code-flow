@@ -4,3 +4,25 @@ export type { PhpErrorCode, PhpFunctionRecord, PhpParserLimits } from './documen
 export { PhpSource } from './source.js';
 export { asNode, childrenOf, nameOf, nodeList, CLASS_KINDS, FUNCTION_KINDS } from './ast.js';
 export type { PhpNode } from './ast.js';
+export {
+  parseComposerMap,
+  classFileCandidates,
+  projectRootUri,
+  projectFileUri,
+  relativeProjectPath
+} from './composer.js';
+export type { ComposerMap, ComposerMapping } from './composer.js';
+export { PhpProjectIndex } from './project.js';
+export type { PhpFileHost, PhpCallResolver, PhpProjectLimits } from './project.js';
+export {
+  namespaceContainer,
+  namespaceOf,
+  resolvePhpName,
+  phpClasses,
+  findPhpCall,
+  phpCalleePosition,
+  phpCallReference,
+  phpCallDependencies,
+  resolvePhpCall
+} from './symbols.js';
+export type { PhpClassRecord, PhpCallReference } from './symbols.js';

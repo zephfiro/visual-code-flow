@@ -110,12 +110,14 @@ export interface StatementDescriptor {
 export interface CallTarget {
   readonly symbolId: string;
   readonly definition: SourceSpan;
+  /** Explains static navigation evidence without claiming a runtime dispatch target. */
+  readonly evidence?: string;
 }
 
 export interface CallResolution {
   readonly callSite: SourceSpan;
   readonly targets: readonly CallTarget[];
-  readonly reason?: 'dynamic' | 'ambiguous' | 'not-found' | 'unsupported';
+  readonly reason?: 'dynamic' | 'ambiguous' | 'not-found' | 'unsupported' | 'external';
 }
 
 export interface AnalysisRequest {
