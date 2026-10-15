@@ -5,6 +5,7 @@ import {
   Background,
   Controls,
   MiniMap,
+  Position,
   ReactFlow,
   type Edge,
   type Node,
@@ -13,7 +14,14 @@ import {
 import '@xyflow/react/dist/style.css';
 import './styles.css';
 import { expansionAction } from './expansion-action.js';
-import { FLOW_SCHEMA_VERSION, type FlowGraph, type FlowNode } from '@visual-code-flow/flow-core';
+import {
+  FLOW_SCHEMA_VERSION,
+  presentationCall,
+  type FlowGraph,
+  type FlowPresentation,
+  type FlowNode
+} from '@visual-code-flow/flow-core';
+import { useFlowPresentation } from './use-flow-presentation.js';
 
 interface VsCodeBridge {
   postMessage(message: unknown): void;
@@ -43,18 +51,25 @@ function nodeStyle(node: FlowNode): NonNullable<Node['style']> {
     padding: 12,
     fontSize: 12,
     lineHeight: 1.5,
+    width: 260,
     maxWidth: 260,
     whiteSpace: 'normal',
     boxShadow: '0 4px 16px rgba(0,0,0,.16)'
   };
 }
 
-function layoutGraph(graph: FlowGraph, direction: 'TB' | 'LR'): { nodes: Node[]; edges: Edge[] } {
+function layoutGraph(
+  presentation: FlowPresentation,
+  direction: 'TB' | 'LR'
+): { nodes: Node[]; edges: Edge[] } {
+  const graph = presentation.graph;
   const layout = new dagre.graphlib.Graph();
   layout.setGraph({ rankdir: direction, ranksep: 65, nodesep: 30 });
   layout.setDefaultEdgeLabel(() => ({}));
 
-  for (const node of graph.nodes) layout.setNode(node.id, { width: 215, height: 65 });
+  const height = (id: string): number =>
+    (presentation.members.get(id)?.length ?? 0) > 1 ? 110 : 90;
+  for (const node of graph.nodes) layout.setNode(node.id, { width: 260, height: height(node.id) });
   for (const edge of graph.edges) layout.setEdge(edge.source, edge.target);
   dagre.layout(layout);
 
@@ -62,10 +77,25 @@ function layoutGraph(graph: FlowGraph, direction: 'TB' | 'LR'): { nodes: Node[];
     const position = layout.node(node.id);
     return {
       id: node.id,
-      data: { label: node.label },
+      data: {
+        label: (
+          <div>
+            <span className="flow-node-label" title={node.label}>
+              {node.label}
+            </span>
+            {(presentation.members.get(node.id)?.length ?? 0) > 1 && (
+              <span className="flow-node-detail-count">
+                {presentation.members.get(node.id)!.length} steps grouped
+              </span>
+            )}
+          </div>
+        )
+      },
       type: 'default',
-      ariaLabel: `${node.kind}: ${node.label}`,
-      position: { x: position.x - 107.5, y: position.y - 32.5 },
+      ariaLabel: `${node.kind}: ${node.label}. ${presentation.members.get(node.id)?.length ?? 1} source steps`,
+      sourcePosition: direction === 'LR' ? Position.Right : Position.Bottom,
+      targetPosition: direction === 'LR' ? Position.Left : Position.Top,
+      position: { x: position.x - 130, y: position.y - height(node.id) / 2 },
       style: nodeStyle(node)
     };
   });
@@ -84,24 +114,30 @@ function layoutGraph(graph: FlowGraph, direction: 'TB' | 'LR'): { nodes: Node[];
 
 function FlowApp() {
   const [status, setStatus] = useState('Select a function to view its flow.');
-  const [graph, setGraph] = useState<FlowGraph | undefined>();
+  const { graph, setGraph, detail, setDetail, presentation } = useFlowPresentation();
+  const [showDetails, setShowDetails] = useState(false);
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | undefined>();
   const [expandedNodeIds, setExpandedNodeIds] = useState<readonly string[]>([]);
   const [layoutDirection, setLayoutDirection] = useState<'TB' | 'LR'>('TB');
   const bridge = useMemo(() => acquireVsCodeApi(), []);
   const view = useMemo(
-    () => (graph ? layoutGraph(graph, layoutDirection) : undefined),
-    [graph, layoutDirection]
+    () => (presentation ? layoutGraph(presentation, layoutDirection) : undefined),
+    [presentation, layoutDirection]
   );
   const expanded = useMemo(() => new Set(expandedNodeIds), [expandedNodeIds]);
   const selectedNode = graph?.nodes.find((node) => node.id === highlightedNodeId);
+  const selectedViewId = highlightedNodeId
+    ? presentation?.nodeForSource.get(highlightedNodeId)
+    : undefined;
+  const selectedMembers = selectedViewId ? (presentation?.members.get(selectedViewId) ?? []) : [];
+  const selectedCall = presentationCall(selectedMembers, highlightedNodeId);
   const highlightedNodes = useMemo(
     () =>
       view?.nodes.map((node) => ({
         ...node,
-        selected: node.id === highlightedNodeId
+        selected: node.id === selectedViewId
       })),
-    [view, highlightedNodeId]
+    [view, selectedViewId]
   );
 
   useEffect(() => {
@@ -138,7 +174,7 @@ function FlowApp() {
     window.addEventListener('message', onMessage);
     bridge.postMessage({ type: 'ready' });
     return () => window.removeEventListener('message', onMessage);
-  }, [bridge]);
+  }, [bridge, setGraph]);
 
   const chooseNode = (nodeId: string): void => {
     setHighlightedNodeId(nodeId || undefined);
@@ -152,7 +188,7 @@ function FlowApp() {
 
   const onNodeClick: NodeMouseHandler = (_, node) => chooseNode(node.id);
   const onNodeDoubleClick: NodeMouseHandler = (_, node) => {
-    const target = graph?.nodes.find((item) => item.id === node.id);
+    const target = presentationCall(presentation?.members.get(node.id) ?? [], highlightedNodeId);
     if (target) toggleExpansion(target);
   };
 
@@ -169,18 +205,35 @@ function FlowApp() {
               {status}
             </p>
           </div>
-          <span className="flow-count">{graph?.nodes.length ?? 0} nodes</span>
+          <span className="flow-count">
+            {presentation?.graph.nodes.length ?? 0}
+            {detail === 'simplified' && graph ? ` / ${graph.nodes.length}` : ''} nodes
+          </span>
         </div>
         <div className="flow-toolbar">
+          <div className="flow-detail-toggle" role="group" aria-label="Flow detail level">
+            {(['simplified', 'detailed'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className="flow-action flow-action-secondary"
+                aria-pressed={detail === mode}
+                onClick={() => setDetail(mode)}
+                disabled={!graph}
+              >
+                {mode === 'simplified' ? 'Simplified' : 'Detailed'}
+              </button>
+            ))}
+          </div>
           <label htmlFor="flow-node-picker">Navigate</label>
           <select
             id="flow-node-picker"
             aria-label="Select graph node"
-            value={selectedNode?.id ?? ''}
+            value={selectedViewId ?? ''}
             onChange={(event) => chooseNode(event.target.value)}
           >
             <option value="">Choose node...</option>
-            {graph?.nodes.map((node) => (
+            {presentation?.graph.nodes.map((node) => (
               <option key={node.id} value={node.id}>
                 {node.kind}: {node.label.slice(0, 72)}
               </option>
@@ -191,36 +244,90 @@ function FlowApp() {
               <button
                 type="button"
                 className="flow-action flow-action-secondary"
-                title="Copy the current graph as Mermaid source"
+                title="Copy the full detailed graph, including grouped steps and exception paths"
                 onClick={() => bridge.postMessage({ type: 'diagram:copy' })}
               >
-                Copy Mermaid
+                Copy detailed Mermaid
               </button>
               <button
                 type="button"
                 className="flow-action flow-action-secondary"
-                title="Save the current graph as a .mmd file"
+                title="Save the full detailed graph, including grouped steps and exception paths"
                 onClick={() => bridge.postMessage({ type: 'diagram:save' })}
               >
-                Save .mmd
+                Save detailed .mmd
               </button>
             </>
           )}
-          {selectedNode?.kind === 'call' && (
+          {selectedMembers.length > 1 && (
+            <button
+              type="button"
+              className="flow-action flow-action-secondary"
+              aria-expanded={showDetails}
+              aria-controls="flow-block-details"
+              onClick={() => setShowDetails(!showDetails)}
+            >
+              {showDetails ? 'Hide' : 'Show'} {selectedMembers.length} steps
+            </button>
+          )}
+          {selectedCall && (
             <button
               type="button"
               className="flow-action"
-              onClick={() => toggleExpansion(selectedNode)}
+              onClick={() => toggleExpansion(selectedCall)}
               title="You can also double-click a call node"
             >
-              {expanded.has(selectedNode.id) ? '− Collapse' : '+ Expand call'}
+              {expanded.has(selectedCall.id) ? '− Collapse' : '+ Expand call'}
             </button>
           )}
         </div>
+        {graph && detail === 'simplified' && (
+          <p className="flow-summary-note">
+            Expression steps are grouped.{' '}
+            {(presentation?.hiddenExceptionEdges ?? 0) > 0
+              ? `${presentation!.hiddenExceptionEdges} potential uncaught-exception edges hidden. `
+              : ''}
+            Use Detailed for all paths. Mermaid exports the full graph.
+          </p>
+        )}
+        {showDetails && selectedMembers.length > 1 && (
+          <section
+            id="flow-block-details"
+            className="flow-block-details"
+            aria-label="Original steps in selected block"
+          >
+            <label htmlFor="flow-step-picker">Source step</label>
+            <select
+              id="flow-step-picker"
+              value={selectedNode?.id ?? ''}
+              onChange={(event) => chooseNode(event.target.value)}
+            >
+              {selectedMembers.map((node) => (
+                <option key={node.id} value={node.id}>
+                  {node.kind}: {node.label}
+                </option>
+              ))}
+            </select>
+            <p>{selectedNode?.label}</p>
+          </section>
+        )}
+        {!!graph?.diagnostics.length && (
+          <details className="flow-diagnostics">
+            <summary>{graph.diagnostics.length} analysis notes</summary>
+            <div>
+              {graph.diagnostics.map((diagnostic, index) => (
+                <p key={`${diagnostic.code}-${index}`}>
+                  {diagnostic.severity}: {diagnostic.message}
+                </p>
+              ))}
+            </div>
+          </details>
+        )}
       </header>
       <main className="flow-canvas">
         {view && view.nodes.length > 0 ? (
           <ReactFlow
+            key={`${graph?.rootSymbolId}:${detail}`}
             nodes={highlightedNodes ?? view.nodes}
             edges={view.edges}
             onNodeClick={onNodeClick}
