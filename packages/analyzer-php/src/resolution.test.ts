@@ -329,11 +329,13 @@ test('same namespace in separate Composer roots remains isolated', async () => {
   const a = projectFixture('file:///one/');
   const b = projectFixture('file:///two/');
   assert.equal(
-    (await new PhpProjectIndex(a.map, a.host).resolve(a.caller, a.source)).targets[0]?.definition.uri,
+    (await new PhpProjectIndex(a.map, a.host).resolve(a.caller, a.source)).targets[0]?.definition
+      .uri,
     'file:///one/app/Services/S.php'
   );
   assert.equal(
-    (await new PhpProjectIndex(b.map, b.host).resolve(b.caller, b.source)).targets[0]?.definition.uri,
+    (await new PhpProjectIndex(b.map, b.host).resolve(b.caller, b.source)).targets[0]?.definition
+      .uri,
     'file:///two/app/Services/S.php'
   );
 });
@@ -358,7 +360,8 @@ test('symlinks, parser failures and size limits fail closed', async () => {
   assert.equal(f.reads.length, 0);
   f.links.clear();
   assert.equal(
-    (await new PhpProjectIndex(f.map, f.host, { maxDocuments: 1 }).resolve(f.caller, f.source)).reason,
+    (await new PhpProjectIndex(f.map, f.host, { maxDocuments: 1 }).resolve(f.caller, f.source))
+      .reason,
     'unsupported'
   );
   const uri = 'file:///project/app/Services/S.php';
