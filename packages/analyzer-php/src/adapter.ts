@@ -1,4 +1,6 @@
 import { PhpStatementExtractor } from './statements.js';
+import { phpCalleePosition, resolvePhpCall } from './symbols.js';
+import type { PhpCallResolver } from './project.js';
 import type {
   AnalysisRequest,
   AnalysisResult,
@@ -21,7 +23,10 @@ export class PhpLanguageAdapter implements LanguageAdapter {
   readonly supportedLanguages = Object.freeze(['php']);
   readonly documents: PhpDocumentCache;
 
-  constructor(limits: Partial<PhpParserLimits> = {}) {
+  constructor(
+    limits: Partial<PhpParserLimits> = {},
+    private readonly resolver?: PhpCallResolver
+  ) {
     this.documents = new PhpDocumentCache(limits);
   }
 
@@ -55,6 +60,10 @@ export class PhpLanguageAdapter implements LanguageAdapter {
     })?.descriptor;
   }
 
+  findCallTargetPosition(request: AnalysisRequest, callSite: SourceSpan): TextPosition | undefined {
+    return phpCalleePosition(this.parseDocument(request), callSite);
+  }
+
   async analyzeFunction(
     request: AnalysisRequest,
     symbol: FunctionDescriptor,
@@ -68,11 +77,14 @@ export class PhpLanguageAdapter implements LanguageAdapter {
   }
 
   async resolveCall(
-    _request: AnalysisRequest,
+    request: AnalysisRequest,
     callSite: SourceSpan,
     cancellation?: Cancellation
   ): Promise<CallResolution> {
+    const document = this.parseDocument(request, cancellation);
     checkCancellation(cancellation);
-    return { callSite, targets: [], reason: 'unsupported' };
+    return this.resolver
+      ? this.resolver.resolve(document, callSite, cancellation)
+      : resolvePhpCall(document, callSite);
   }
 }
