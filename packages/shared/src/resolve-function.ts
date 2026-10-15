@@ -82,5 +82,6 @@ export async function resolveFunctionCall(
       symbol = candidate;
     }
   }
+  if (fallbackSymbolId !== undefined && symbol?.symbolId !== fallbackSymbolId) return undefined;
   return symbol ? { request: targetRequest, symbol, adapter: targetAdapter } : undefined;
 }

@@ -170,3 +170,21 @@ test('precise definition lookup never guesses an enclosing implementation for a 
     undefined
   );
 });
+
+test('local fallback rejects a precise definition whose symbol identity changed', async () => {
+  const php = {
+    ...adapter('php'),
+    findFunctionDefinition: (input: AnalysisRequest) => ({
+      ...symbol(input.uri, 'php'),
+      symbolId: 'different-symbol'
+    })
+  };
+  assert.equal(
+    await resolveFunctionCall(
+      new LanguageAdapterRegistry([adapter('typescript'), php]),
+      source,
+      host()
+    ),
+    undefined
+  );
+});
