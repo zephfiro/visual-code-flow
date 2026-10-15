@@ -4,6 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const vscode = require('vscode');
 const { runPhp } = require('./php.cjs');
+const { runLaravel } = require('./laravel.cjs');
 
 const EXTENSION_ID = 'zephfiro.visual-code-flow';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -118,6 +119,7 @@ async function run() {
     assert.ok(final.panel);
     assert.ok(final.graph.nodes.length > 0);
     await runPhp({ retry });
+    await runLaravel({ retry });
   } finally {
     await fs.rm(temp, { recursive: true, force: true });
   }

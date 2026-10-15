@@ -23,6 +23,29 @@ export {
   phpCalleePosition,
   phpCallReference,
   phpCallDependencies,
+  phpClassDependencies,
+  resolvePhpMethodDefinition,
   resolvePhpCall
 } from './symbols.js';
 export type { PhpClassRecord, PhpCallReference } from './symbols.js';
+
+export { extractLaravelRoutes, LARAVEL_ROUTE_CONTEXT } from './laravel-routes.js';
+export type {
+  LaravelRoute,
+  LaravelRouteHandler,
+  LaravelRouteContext,
+  LaravelRouteExtraction,
+  LaravelRouteInclude
+} from './laravel-routes.js';
+export {
+  laravelClass,
+  laravelPath,
+  laravelChain,
+  laravelArgument,
+  laravelString,
+  laravelStrings,
+  laravelMap,
+  laravelList
+} from './laravel-syntax.js';
+export { indexLaravelRoutes } from './laravel-project.js';
+export type { LaravelRouteSnapshot } from './laravel-project.js';

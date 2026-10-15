@@ -11,7 +11,14 @@ import {
   PhpDocumentCache,
   type PhpDocument
 } from './document.js';
-import { phpCallDependencies, phpCallReference, phpClasses, resolvePhpCall } from './symbols.js';
+import {
+  phpCallDependencies,
+  phpCallReference,
+  phpClassDependencies,
+  phpClasses,
+  resolvePhpCall,
+  resolvePhpMethodDefinition
+} from './symbols.js';
 
 export interface PhpFileHost {
   /** Must report links as links instead of silently following them. */
@@ -70,22 +77,65 @@ export class PhpProjectIndex implements PhpCallResolver {
     source: SourceSpan,
     cancellation?: Cancellation
   ): Promise<CallResolution> {
+    const documents = await this.collect(document, cancellation, (loaded) =>
+      phpCallDependencies(document, source, loaded)
+    );
+    if (!documents) return { callSite: source, targets: [], reason: 'unsupported' };
+    const result = resolvePhpCall(document, source, documents);
+    if (result.reason === 'not-found') {
+      const reference = phpCallReference(document, source, documents);
+      if (
+        reference.kind === 'method' &&
+        !phpClasses(documents).some((item) =>
+          reference.names.some((name) => item.name.toLowerCase() === name.toLowerCase())
+        )
+      )
+        return { callSite: source, targets: [], reason: 'external' };
+    }
+    return result;
+  }
+
+  /** Locate declaration bodies without fabricating a PHP call or executing a container. */
+  async resolveMethod(
+    document: PhpDocument,
+    source: SourceSpan,
+    className: string,
+    method: string,
+    cancellation?: Cancellation
+  ): Promise<CallResolution> {
+    const documents = await this.loadClasses(document, [className], cancellation);
+    return documents
+      ? resolvePhpMethodDefinition(source, className, method, documents)
+      : { callSite: source, targets: [], reason: 'unsupported' };
+  }
+
+  async loadClasses(
+    document: PhpDocument,
+    names: readonly string[],
+    cancellation?: Cancellation
+  ): Promise<readonly PhpDocument[] | undefined> {
+    return this.collect(document, cancellation, (loaded) => [
+      ...names,
+      ...phpClasses(loaded).flatMap(phpClassDependencies)
+    ]);
+  }
+
+  private async collect(
+    document: PhpDocument,
+    cancellation: Cancellation | undefined,
+    dependencies: (loaded: readonly PhpDocument[]) => readonly string[]
+  ): Promise<readonly PhpDocument[] | undefined> {
     const generation = this.generation;
     const check = (): void => {
       checkCancellation(cancellation);
       if (this.generation !== generation) throw new PhpAnalysisError('cancelled');
     };
     check();
-    const unresolved = (reason: CallResolution['reason']): CallResolution => ({
-      callSite: source,
-      targets: [],
-      ...(reason ? { reason } : {})
-    });
     if (
       this.map.incomplete ||
       relativeProjectPath(this.map.root, document.request.uri) === undefined
     )
-      return unresolved('unsupported');
+      return undefined;
     const loaded = new Map<string, PhpDocument>([[document.request.uri, document]]);
     const attempted = new Set<string>([document.request.uri]);
     const checkedNames = new Set<string>();
@@ -152,9 +202,7 @@ export class PhpProjectIndex implements PhpCallResolver {
     let completed = false;
     for (let round = 0; round < this.limits.maxDependencyRounds; round++) {
       check();
-      const names = phpCallDependencies(document, source, [...loaded.values()]).filter(
-        (name) => !checkedNames.has(name)
-      );
+      const names = dependencies([...loaded.values()]).filter((name) => !checkedNames.has(name));
       if (!names.length) {
         completed = true;
         break;
@@ -165,19 +213,6 @@ export class PhpProjectIndex implements PhpCallResolver {
       }
     }
     check();
-    if (incomplete || !completed) return unresolved('unsupported');
-    const documents = [...loaded.values()];
-    const result = resolvePhpCall(document, source, documents);
-    if (result.reason === 'not-found') {
-      const reference = phpCallReference(document, source, documents);
-      if (
-        reference.kind === 'method' &&
-        !phpClasses(documents).some((item) =>
-          reference.names.some((name) => item.name.toLowerCase() === name.toLowerCase())
-        )
-      )
-        return unresolved('external');
-    }
-    return result;
+    return incomplete || !completed ? undefined : [...loaded.values()];
   }
 }
