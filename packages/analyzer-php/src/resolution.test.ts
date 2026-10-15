@@ -8,9 +8,28 @@ import type { AnalysisRequest } from '@visual-code-flow/shared';
 
 const adapter = new PhpLanguageAdapter();
 const request = (text: string, uri = 'file:///project/app/Test.php'): AnalysisRequest => ({ uri, text: `<?php ${text}`, languageId: 'php', documentVersion: 1 });
-function fixture(text: string, call: string) {
+function fixture(text: string, call: string, occurrence = 0) {
   const doc = adapter.parseDocument(request(text));
-  const node = doc.nodes.find((item) => ['call', 'new'].includes(item.kind) && doc.source.slice(item).trim().replace(/;$/, '') === call);
+  const matches = [];
+  let start = doc.request.text.indexOf(call);
+  while (start >= 0) {
+    const end = start + call.length;
+    // Ignore textual matches in function declarations. Parentheses may be
+    // excluded from AST locations; production source intervals stay unchanged.
+    const candidates = doc.nodes.filter((item) => {
+      if (!['call', 'new'].includes(item.kind)) return false;
+      const [a, rawEnd] = doc.source.offsets(item);
+      const b = doc.request.text[rawEnd - 1] === ';' ? rawEnd - 1 : rawEnd;
+      return a >= start && b <= end;
+    }).sort((a, b) => {
+      const left = doc.source.offsets(a);
+      const right = doc.source.offsets(b);
+      return (right[1] - right[0]) - (left[1] - left[0]);
+    });
+    if (candidates[0]) matches.push(candidates[0]);
+    start = doc.request.text.indexOf(call, start + 1);
+  }
+  const node = matches[occurrence];
   assert.ok(node, `Missing test call: ${call}`);
   return { doc, source: doc.source.span(node) };
 }
@@ -171,4 +190,30 @@ test('a generation change cancels a pending resolution', async () => {
 
 test('private properties do not resolve from a child class', () => {
   assert.equal(reason('class S { function save() {} } class A { private S $s; } class B extends A { function run() { $this->s->save(); } }', '$this->s->save()'), 'dynamic');
+});
+
+test('the second repeated namespace uses its own import table', () => {
+  const { doc, source } = fixture('namespace One { class S { static function run() {} } } namespace Two { class S { static function run() {} } } namespace App { use One\\S; function first() { S::run(); } } namespace App { use Two\\S; function second() { S::run(); } }', 'S::run()', 1);
+  assert.ok(resolvePhpCall(doc, source).targets[0]?.symbolId.includes('Two\\S::run'));
+});
+
+test('missing and duplicate PSR-4 class files remain explicit', async () => {
+  const f = projectFixture();
+  const uri = 'file:///project/app/Services/S.php';
+  const original = f.files.get(uri)!;
+  f.files.delete(uri);
+  assert.equal((await new PhpProjectIndex(f.map, f.host).resolve(f.caller, f.source)).reason, 'external');
+  f.files.set(uri, original);
+  const duplicateUri = 'file:///project/src/Services/S.php';
+  f.files.set(duplicateUri, { ...original, uri: duplicateUri });
+  const map = parseComposerMap(f.map.root, JSON.stringify({ autoload: { 'psr-4': { 'App\\': ['app/', 'src/'] } } }));
+  assert.equal((await new PhpProjectIndex(map, f.host).resolve(f.caller, f.source)).reason, 'ambiguous');
+});
+
+test('adapter exposes local targets and rejects foreign or cancelled spans', async () => {
+  const { doc, source } = fixture('function helper() {} function run() { helper(); }', 'helper()');
+  assert.equal((await adapter.resolveCall(doc.request, source)).targets.length, 1);
+  assert.ok(adapter.findCallTargetPosition(doc.request, source));
+  assert.equal((await adapter.resolveCall(doc.request, { ...source, uri: 'file:///foreign.php' })).targets.length, 0);
+  await assert.rejects(adapter.resolveCall(doc.request, source, { isCancellationRequested: true }));
 });
