@@ -5,3 +5,4 @@ export * from './source-map.js';
 export * from './cache.js';
 export * from './expansion.js';
 export * from './text-anchor.js';
+export * from './presentation.js';

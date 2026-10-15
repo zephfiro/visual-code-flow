@@ -207,3 +207,80 @@ body,
 .flow-action-secondary:hover {
   background: var(--vscode-button-secondaryHoverBackground);
 }
+
+.flow-node-label {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.flow-node-detail-count {
+  display: block;
+  margin-top: 6px;
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.flow-detail-toggle {
+  display: flex;
+  gap: 2px;
+}
+
+.flow-detail-toggle [aria-pressed='true'] {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border-color: var(--vscode-focusBorder);
+}
+
+.flow-summary-note,
+.flow-diagnostics {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  line-height: 1.5;
+}
+
+.flow-diagnostics summary {
+  cursor: pointer;
+}
+
+.flow-diagnostics div {
+  max-height: 100px;
+  overflow: auto;
+}
+
+.flow-block-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.flow-block-details select {
+  min-width: 0;
+  flex: 1;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+  font: inherit;
+}
+
+.flow-block-details p {
+  width: 100%;
+  margin: 0;
+  max-height: 80px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.flow-block-details select:focus-visible,
+.flow-diagnostics summary:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder);
+}
