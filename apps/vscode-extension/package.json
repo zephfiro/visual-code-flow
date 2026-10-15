@@ -31,6 +31,16 @@
         "command": "visualCodeFlow.openFlow",
         "title": "Open Flow",
         "category": "Visual Code Flow"
+      },
+      {
+        "command": "visualCodeFlow.openLaravelRoute",
+        "title": "Open Laravel Route",
+        "category": "Visual Code Flow"
+      },
+      {
+        "command": "visualCodeFlow.openRouteDeclaration",
+        "title": "Open Route Declaration",
+        "category": "Visual Code Flow"
       }
     ],
     "menus": {
@@ -39,6 +49,11 @@
           "command": "visualCodeFlow.openFlow",
           "when": "editorLangId == typescript || editorLangId == javascript || editorLangId == typescriptreact || editorLangId == javascriptreact || editorLangId == php",
           "group": "navigation@25"
+        },
+        {
+          "command": "visualCodeFlow.openLaravelRoute",
+          "when": "editorLangId == php",
+          "group": "navigation@26"
         }
       ]
     },

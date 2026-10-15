@@ -19,8 +19,12 @@ import { LiveFlowRefresh } from './live-refresh.js';
 import { readFlowSettings } from './settings.js';
 import { FlowSessionStore } from './session-store.js';
 import { PhpWorkspace, documentSnapshot } from './php-workspace.js';
+import { LaravelWorkspace } from './laravel-workspace.js';
+import type { LaravelRoute } from '@visual-code-flow/analyzer-php';
+import type { SourceSpan, TextPosition } from '@visual-code-flow/shared';
 
 export const OPEN_FLOW_COMMAND = 'visualCodeFlow.openFlow';
+export const OPEN_LARAVEL_ROUTE_COMMAND = 'visualCodeFlow.openLaravelRoute';
 
 /** A single panel owns its revisions. No obsolete asynchronous result can replace its state. */
 class FlowController implements vscode.Disposable {
@@ -39,6 +43,10 @@ class FlowController implements vscode.Disposable {
   private saveDestination: vscode.Uri | undefined;
   private readonly subscriptions: vscode.Disposable[] = [];
   private readonly php = new PhpWorkspace();
+  private readonly laravel = new LaravelWorkspace(this.php);
+  private testRouteName: string | undefined;
+  private routeOrigin: SourceSpan | undefined;
+  private routeOriginRequest: AnalysisRequest | undefined;
   private readonly phpAdapter = new PhpLanguageAdapter({}, this.php);
   private readonly adapters = new LanguageAdapterRegistry([
     new TypeScriptLanguageAdapter(),
@@ -70,13 +78,20 @@ class FlowController implements vscode.Disposable {
     this.refresh.setDebounceMs(readFlowSettings().refreshDebounceMs);
     this.subscriptions.push(
       this.php,
+      this.laravel,
       this.refresh,
       vscode.commands.registerCommand(OPEN_FLOW_COMMAND, () => this.openFlow()),
+      vscode.commands.registerCommand(OPEN_LARAVEL_ROUTE_COMMAND, () => this.openLaravelRoute()),
+      vscode.commands.registerCommand('visualCodeFlow.openRouteDeclaration', () =>
+        this.openRouteDeclaration()
+      ),
       vscode.workspace.onDidChangeTextDocument((event) => {
         if (this.panel && this.refresh.onDocumentChanged(event, readFlowSettings().autoRefresh))
           this.markDirty();
       }),
       this.php.onDidChange((uri) => {
+        this.routeOrigin = undefined;
+        this.routeOriginRequest = undefined;
         if (
           this.panel &&
           this.rootUri &&
@@ -123,11 +138,15 @@ class FlowController implements vscode.Disposable {
           dirty: this.dirty,
           status: this.status,
           expandedIds: this.expansion?.expandedCalls ?? [],
-          selectedId: this.selectedId
+          selectedId: this.selectedId,
+          routeOrigin: this.routeOrigin
         })),
         vscode.commands.registerCommand('visualCodeFlow.__test.dispatch', (message: unknown) =>
           this.handle(message)
         ),
+        vscode.commands.registerCommand('visualCodeFlow.__test.chooseRoute', (name: string) => {
+          this.testRouteName = name;
+        }),
         // Native dialog replacement exists only in an Extension Development Test Host.
         vscode.commands.registerCommand(
           'visualCodeFlow.__test.chooseSaveDestination',
@@ -222,13 +241,40 @@ class FlowController implements vscode.Disposable {
     void this.persist();
   }
 
-  async openFlow(): Promise<void> {
-    const editor = vscode.window.activeTextEditor;
+  async openFlow(target?: {
+    request: AnalysisRequest;
+    position: TextPosition;
+    cancellation?: Cancellation;
+  }): Promise<void> {
+    const editor = target
+      ? await vscode.window.showTextDocument(vscode.Uri.parse(target.request.uri), {
+          viewColumn: this.sourceColumn,
+          preview: false
+        })
+      : vscode.window.activeTextEditor;
     if (!editor) {
       await vscode.window.showInformationMessage('Open a source file to explore its flow.');
       return;
     }
+    if (target?.cancellation?.isCancellationRequested) return;
     const document = editor.document;
+    if (
+      target &&
+      (document.getText() !== target.request.text ||
+        document.version !== target.request.documentVersion)
+    ) {
+      this.setStatus('The route handler changed; select the route again.');
+      return;
+    }
+    if (target)
+      editor.selection = new vscode.Selection(
+        target.position.line,
+        target.position.character,
+        target.position.line,
+        target.position.character
+      );
+    this.routeOrigin = undefined;
+    this.routeOriginRequest = undefined;
     const adapter = this.adapters.get(document.languageId);
     if (!adapter || document.uri.path.toLowerCase().endsWith('.blade.php')) {
       this.setStatus(
@@ -243,7 +289,10 @@ class FlowController implements vscode.Disposable {
     const request = documentSnapshot(document);
     const token = this.token(revision);
     try {
-      const selected = adapter.findFunction(request, editor.selection.active);
+      const selected = target
+        ? (adapter.findFunctionDefinition?.(request, target.position) ??
+          adapter.findFunction(request, target.position))
+        : adapter.findFunction(request, editor.selection.active);
       if (!selected) {
         this.setStatus('Place your cursor inside a function or method with a body.');
         void vscode.window.showInformationMessage(this.status);
@@ -293,6 +342,125 @@ class FlowController implements vscode.Disposable {
       this.updateGraph();
     } catch (error) {
       if (!token.isCancellationRequested) this.report(error, request.languageId === 'php');
+    }
+  }
+
+  private async openLaravelRoute(): Promise<void> {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      this.setStatus('Open a file inside a Laravel Composer project first.');
+      return;
+    }
+    const sourceUri = editor.document.uri.toString();
+    const revision = ++this.revision;
+    this.refresh.cancelPending();
+    const token = this.token(revision);
+    try {
+      const snapshot = await this.laravel.scan(sourceUri, token);
+      if (token.isCancellationRequested) return;
+      if (!snapshot) {
+        this.setStatus('No Laravel dependency found in the nearest Composer project.');
+        return;
+      }
+      if (!snapshot.routes.length) {
+        this.setStatus(`No statically recognized routes. ${snapshot.diagnostics.join(' ')}`);
+        return;
+      }
+      const items = snapshot.routes.map((route) => ({
+        label: `${route.methods.join('|') || '?'} ${route.path ?? '[dynamic URI]'}`,
+        description: `${route.name ?? '(unnamed)'}${route.partial ? ' - partial declaration' : ''}`,
+        detail: `Declared middleware: ${route.middleware.join(', ') || '(none here)'}. ${route.diagnostics.join(' ')}`,
+        route
+      }));
+      let selected: { route: LaravelRoute } | undefined;
+      if (
+        this.context.extensionMode === vscode.ExtensionMode.Test &&
+        this.testRouteName !== undefined
+      ) {
+        const name = this.testRouteName;
+        this.testRouteName = undefined;
+        selected = items.find((item) => item.route.name === name);
+      } else
+        selected = await vscode.window.showQuickPick(items, {
+          title: 'Laravel route declarations - navigation, not an execution trace',
+          placeHolder: snapshot.diagnostics.length
+            ? `Partial index: ${snapshot.diagnostics.join(' ')}`
+            : 'Select a route handler',
+          matchOnDescription: true,
+          matchOnDetail: true,
+          ignoreFocusOut: true
+        });
+      if (!selected || token.isCancellationRequested) return;
+      await this.laravel.assertCurrent(snapshot, sourceUri, token);
+      const handler = await this.laravel.handler(snapshot, selected.route, token);
+      if (token.isCancellationRequested) return;
+      await this.laravel.assertCurrent(snapshot, sourceUri, token);
+      if (token.isCancellationRequested) return;
+      if (!handler) {
+        this.routeOrigin = selected.route.source;
+        this.routeOriginRequest = snapshot.documents.find(
+          (document) => document.uri === selected.route.source.uri
+        );
+        this.setStatus(
+          'Route handler is dynamic, unavailable, non-public or ambiguous. Use Open Route Declaration; no implementation was guessed.'
+        );
+        return;
+      }
+      const beforeOpen = this.revision;
+      const routeStale = (): boolean =>
+        token.isCancellationRequested || !this.laravel.isCurrent(snapshot);
+      const openingToken: Cancellation = {
+        get isCancellationRequested() {
+          return routeStale();
+        }
+      };
+      await this.openFlow({
+        request: handler.request,
+        position: handler.definition.start,
+        cancellation: openingToken
+      });
+      if (this.revision !== beforeOpen + 1 || this.rootUri !== handler.request.uri || this.dirty)
+        return;
+      this.routeOrigin = selected.route.source;
+      this.routeOriginRequest = snapshot.documents.find(
+        (document) => document.uri === selected.route.source.uri
+      );
+      this.setStatus(
+        `Route ${selected.route.name ?? selected.route.path ?? '(partial)'} -> handler. Navigation only; declared middleware is not the full runtime pipeline. ${selected.route.diagnostics.join(' ')}`
+      );
+    } catch (error) {
+      if (!token.isCancellationRequested) this.report(error, true);
+    }
+  }
+
+  private async openRouteDeclaration(): Promise<void> {
+    const source = this.routeOrigin;
+    const request = this.routeOriginRequest;
+    if (!source || !request || this.dirty) {
+      this.setStatus('Select an up-to-date Laravel route first.');
+      return;
+    }
+    const token = this.token(this.revision);
+    try {
+      const current = await this.php.readPhp(source.uri);
+      if (
+        token.isCancellationRequested ||
+        current.text !== request.text ||
+        current.documentVersion !== request.documentVersion
+      )
+        return;
+      await vscode.window.showTextDocument(vscode.Uri.parse(source.uri), {
+        viewColumn: this.sourceColumn,
+        preview: false,
+        selection: new vscode.Range(
+          source.start.line,
+          source.start.character,
+          source.end.line,
+          source.end.character
+        )
+      });
+    } catch (error) {
+      if (!token.isCancellationRequested) this.report(error, true);
     }
   }
 
@@ -424,6 +592,7 @@ class FlowController implements vscode.Disposable {
     this.decoration?.dispose();
     this.panel?.dispose();
     for (const subscription of this.subscriptions) subscription.dispose();
+    this.phpAdapter.documents.clear();
   }
 }
 

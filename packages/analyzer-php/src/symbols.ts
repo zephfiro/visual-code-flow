@@ -529,3 +529,40 @@ export function resolvePhpCall(
   };
   return { callSite: source, targets: [target] };
 }
+
+/** A public concrete source body, not proof of framework/runtime dispatch. */
+export function resolvePhpMethodDefinition(
+  source: SourceSpan,
+  className: string,
+  method: string,
+  documents: readonly PhpDocument[]
+): CallResolution {
+  const fail = (reason: NonNullable<CallResolution['reason']>): CallResolution => ({
+    callSite: source,
+    targets: [],
+    reason
+  });
+  const records = phpClasses(documents);
+  const matches = records.filter((record) => normalized(record.name) === normalized(className));
+  if (!matches.length) return fail('external');
+  if (matches.length !== 1) return fail('ambiguous');
+  const record = matches[0]!;
+  if (record.node.kind !== 'class' || record.node.isAbstract === true) return fail('unsupported');
+  const found = findMethod(record, method, records);
+  if (found.unsafe) return fail('unsupported');
+  if (found.functions.length > 1) return fail('ambiguous');
+  const fn = found.functions[0];
+  if (!fn) return fail('not-found');
+  if (['private', 'protected'].includes(String(fn.node.visibility))) return fail('unsupported');
+  return {
+    callSite: source,
+    targets: [
+      {
+        symbolId: fn.descriptor.symbolId,
+        definition: fn.definition,
+        evidence:
+          'Explicit class/method source reference; navigation does not prove runtime dispatch.'
+      }
+    ]
+  };
+}
