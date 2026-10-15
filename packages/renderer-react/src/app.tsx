@@ -13,7 +13,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import './styles.css';
 import { expansionAction } from './expansion-action.js';
-import type { FlowGraph, FlowNode } from '@visual-code-flow/flow-core';
+import { FLOW_SCHEMA_VERSION, type FlowGraph, type FlowNode } from '@visual-code-flow/flow-core';
 
 interface VsCodeBridge {
   postMessage(message: unknown): void;
@@ -76,7 +76,7 @@ function layoutGraph(graph: FlowGraph, direction: 'TB' | 'LR'): { nodes: Node[];
     label: edge.label ?? (edge.kind === 'normal' ? undefined : edge.kind),
     type: 'smoothstep',
     animated: edge.kind === 'loop-back',
-    style: { stroke: '#94a3b8', strokeDasharray: edge.label ? '5 5' : undefined },
+    style: { stroke: '#94a3b8', strokeDasharray: edge.kind === 'reference' ? '5 5' : undefined },
     labelStyle: { fill: 'var(--vscode-foreground)', fontSize: 11 }
   }));
   return { nodes, edges };
@@ -130,7 +130,7 @@ function FlowApp() {
         typeof data.graph === 'object' &&
         data.graph !== null &&
         'schemaVersion' in data.graph &&
-        data.graph.schemaVersion === 1
+        data.graph.schemaVersion === FLOW_SCHEMA_VERSION
       ) {
         setGraph(data.graph as FlowGraph);
       }

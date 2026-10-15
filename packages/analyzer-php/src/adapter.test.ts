@@ -188,13 +188,13 @@ test('stale and foreign symbols cannot be analyzed as a different function', asy
   );
 });
 
-test('discovery never pretends that unimplemented PHP statements have a correct CFG', async () => {
+test('statement analysis replaces the discovery placeholder with real return semantics', async () => {
   const adapter = new PhpLanguageAdapter();
   const input = request('<?php function root() { return 1; }');
   const symbol = adapter.findFunction(input, at(input, 'return'))!;
   const result = await adapter.analyzeFunction(input, symbol);
-  assert.equal(result.statements[0]?.kind, 'unsupported');
-  assert.ok(result.diagnostics.length > 0);
+  assert.equal(result.statements[0]?.kind, 'return');
+  assert.equal(result.diagnostics.length, 0);
 });
 
 test('Blade and non-PHP documents are explicitly rejected', () => {

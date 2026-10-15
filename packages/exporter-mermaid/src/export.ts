@@ -33,7 +33,10 @@ export function exportMermaid(graph: FlowGraph): string {
     const from = aliases.get(edge.source)!;
     const to = aliases.get(edge.target)!;
     const label = edge.label ?? (edge.kind === 'normal' ? '' : edge.kind);
-    lines.push(label ? `  ${from} -->|${escapeLabel(label)}| ${to}` : `  ${from} --> ${to}`);
+    const arrow = edge.kind === 'reference' ? '-.->' : '-->';
+    lines.push(
+      label ? `  ${from} ${arrow}|${escapeLabel(label)}| ${to}` : `  ${from} ${arrow} ${to}`
+    );
   }
   return `${lines.join('\n')}\n`;
 }

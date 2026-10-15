@@ -77,7 +77,7 @@ export class FlowExpansionSession {
           id: id('implementation-link'),
           source: parentCallId,
           target: id(entry.id),
-          kind: 'normal',
+          kind: 'reference',
           label: 'Implementation (navigation)'
         });
       }

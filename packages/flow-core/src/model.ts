@@ -1,4 +1,4 @@
-export const FLOW_SCHEMA_VERSION = 1 as const;
+export const FLOW_SCHEMA_VERSION = 2 as const;
 
 export type FlowNodeKind =
   | 'entry'
@@ -13,7 +13,7 @@ export type FlowNodeKind =
   | 'unsupported';
 
 export type FlowEdgeKind =
-  'normal' | 'true' | 'false' | 'loop-back' | 'break' | 'continue' | 'exception';
+  'normal' | 'true' | 'false' | 'loop-back' | 'break' | 'continue' | 'exception' | 'reference';
 
 export interface SourcePosition {
   readonly line: number;

@@ -5,7 +5,7 @@ import type { FlowGraph } from '@visual-code-flow/flow-core';
 
 test('exports valid shape identifiers and semantic edges', () => {
   const graph: FlowGraph = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     rootSymbolId: 'calc',
     nodes: [
       { id: 'root with spaces', kind: 'entry', label: 'Start', expandable: false },
@@ -27,11 +27,35 @@ test('exports valid shape identifiers and semantic edges', () => {
 
 test('rejects malformed graphs', () => {
   const graph: FlowGraph = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     rootSymbolId: 'calc',
     nodes: [],
     edges: [{ id: 'broken', source: 'missing', target: 'missing', kind: 'normal' }],
     diagnostics: []
   };
   assert.throws(() => exportMermaid(graph));
+});
+
+test('navigation references are exported as dotted edges, not execution steps', () => {
+  const graph: FlowGraph = {
+    schemaVersion: 2,
+    rootSymbolId: 'root',
+    diagnostics: [],
+    nodes: [
+      { id: 'operation', kind: 'unsupported', label: 'Unknown order', expandable: false },
+      { id: 'target', kind: 'call', label: 'call("quoted|value")', expandable: false }
+    ],
+    edges: [
+      {
+        id: 'reference',
+        source: 'operation',
+        target: 'target',
+        kind: 'reference',
+        label: 'Navigation only'
+      }
+    ]
+  };
+  const diagram = exportMermaid(graph);
+  assert.match(diagram, /n0 -\.->\|Navigation only\| n1/);
+  assert.ok(!diagram.includes('n0 -->'));
 });

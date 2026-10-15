@@ -19,5 +19,8 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "devDependencies": {
+    "@visual-code-flow/flow-core": "0.0.0"
   }
 }
