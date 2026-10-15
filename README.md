@@ -10,7 +10,7 @@
 - Expand/retract local and cross-file call implementations.
 - Bidirectional code ↔ graph navigation and live source refresh.
 - Workspace session restoration and configurable layout/expansion depth.
-- Mermaid export support in the core library.
+- Copy Mermaid source or save the visualized graph to a `.mmd` file.
 
 ## Install the MVP VSIX
 

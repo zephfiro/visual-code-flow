@@ -186,6 +186,26 @@ function FlowApp() {
               </option>
             ))}
           </select>
+          {graph && (
+            <>
+              <button
+                type="button"
+                className="flow-action flow-action-secondary"
+                title="Copy the current graph as Mermaid source"
+                onClick={() => bridge.postMessage({ type: 'diagram:copy' })}
+              >
+                Copy Mermaid
+              </button>
+              <button
+                type="button"
+                className="flow-action flow-action-secondary"
+                title="Save the current graph as a .mmd file"
+                onClick={() => bridge.postMessage({ type: 'diagram:save' })}
+              >
+                Save .mmd
+              </button>
+            </>
+          )}
           {selectedNode?.kind === 'call' && (
             <button
               type="button"

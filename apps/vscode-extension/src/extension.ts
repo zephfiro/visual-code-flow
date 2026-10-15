@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { TypeScriptLanguageAdapter } from '@visual-code-flow/analyzer-typescript';
+import { exportMermaid } from '@visual-code-flow/exporter-mermaid';
 import {
   buildControlFlowGraph,
   FlowExpansionSession,
@@ -140,6 +141,35 @@ export function activate(context: vscode.ExtensionContext): void {
       );
       const handler = (message: unknown): void => {
         if (!isGraphViewMessage(message)) return;
+        if (message.type === 'diagram:copy' || message.type === 'diagram:save') {
+          if (!currentGraph || sourceDirty) {
+            void vscode.window.showWarningMessage(
+              'Visual Code Flow: refresh the diagram before exporting.'
+            );
+            return;
+          }
+          const diagram = exportMermaid(currentGraph);
+          void (async () => {
+            try {
+              if (message.type === 'diagram:copy') {
+                await vscode.env.clipboard.writeText(diagram);
+                void vscode.window.showInformationMessage('Mermaid diagram copied to clipboard.');
+                return;
+              }
+              const destination = await vscode.window.showSaveDialog({
+                filters: { Mermaid: ['mmd'] },
+                saveLabel: 'Save Mermaid Diagram'
+              });
+              if (!destination) return;
+              await vscode.workspace.fs.writeFile(destination, new TextEncoder().encode(diagram));
+              void vscode.window.showInformationMessage('Mermaid diagram saved.');
+            } catch (error) {
+              const details = error instanceof Error ? error.message : String(error);
+              void vscode.window.showErrorMessage(`Mermaid export failed: ${details}`);
+            }
+          })();
+          return;
+        }
         if (message.type === 'node:expand') {
           if (sourceDirty) return;
           const session = expansionSession;

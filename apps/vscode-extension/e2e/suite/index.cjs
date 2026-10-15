@@ -61,6 +61,15 @@ async function run() {
     assert.ok(callNode, 'Variable initializer call must be represented as a call node');
 
     await vscode.commands.executeCommand('visualCodeFlow.__test.dispatch', {
+      type: 'diagram:copy'
+    });
+    await retry(async () => {
+      const mermaid = await vscode.env.clipboard.readText();
+      assert.match(mermaid, /^flowchart TD/);
+      assert.ok(mermaid.includes('helper'), 'Copied diagram contains the call label');
+    });
+
+    await vscode.commands.executeCommand('visualCodeFlow.__test.dispatch', {
       type: 'node:expand',
       nodeId: callNode.id
     });

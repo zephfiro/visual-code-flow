@@ -10,7 +10,7 @@ Explore function control flow and cross-file calls without leaving VS Code.
 4. Run **Visual Code Flow: Open Flow** from the Command Palette or editor context menu.
 5. Click graph nodes to navigate to their source. Double-click function-call nodes, or use the **Expand call** button, to explore their implementation. Use **Collapse** to return to the overview.
 
-The diagram supports zoom, pan, a minimap, keyboard node selection, and source/editor highlighting. Function definitions across files are resolved using VS Code's active definition providers when available.
+The diagram supports zoom, pan, a minimap, keyboard node selection, and source/editor highlighting. Use **Copy Mermaid** or **Save .mmd** in the toolbar to export the current graph. Function definitions across files are resolved using VS Code's active definition providers when available.
 
 ## Settings
 

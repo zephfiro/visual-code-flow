@@ -85,7 +85,8 @@
   },
   "dependencies": {
     "@visual-code-flow/analyzer-typescript": "0.0.0",
-    "@visual-code-flow/flow-core": "0.0.0"
+    "@visual-code-flow/flow-core": "0.0.0",
+    "@visual-code-flow/exporter-mermaid": "0.0.0"
   },
   "license": "MIT",
   "repository": {
