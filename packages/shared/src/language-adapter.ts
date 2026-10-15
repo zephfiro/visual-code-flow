@@ -68,6 +68,13 @@ export interface AnalysisResult {
 export interface LanguageAdapter {
   readonly supportedLanguages: readonly string[];
   findFunction(request: AnalysisRequest, position: TextPosition): FunctionDescriptor | undefined;
+  /** Optional precise callee location for an editor definition provider. */
+  findCallTargetPosition?(request: AnalysisRequest, callSite: SourceSpan): TextPosition | undefined;
+  /** Optional declaration lookup when providers point outside a function body. */
+  findFunctionDefinition?(
+    request: AnalysisRequest,
+    position: TextPosition
+  ): FunctionDescriptor | undefined;
   analyzeFunction(
     request: AnalysisRequest,
     symbol: FunctionDescriptor,

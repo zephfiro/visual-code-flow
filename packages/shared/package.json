@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "npm run build && node --test dist/language-adapter.test.js"
+    "test": "npm run build && node --test dist/*.test.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
