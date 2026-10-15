@@ -192,10 +192,10 @@ export class PhpWorkspace implements PhpCallResolver, vscode.Disposable {
     cancellation?: Cancellation
   ): Promise<CallResolution> {
     const generation = this.generation;
-    const owner = this;
+    const isStale = (): boolean => generation !== this.generation;
     const token: Cancellation = {
       get isCancellationRequested() {
-        return cancellation?.isCancellationRequested === true || generation !== owner.generation;
+        return cancellation?.isCancellationRequested === true || isStale();
       }
     };
     const map = await this.projectFor(document.request.uri, token);

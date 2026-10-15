@@ -152,10 +152,10 @@ class FlowController implements vscode.Disposable {
     this.sessions.invalidate();
   }
   private token(revision: number): Cancellation {
-    const owner = this;
+    const isCancelled = (): boolean => this.revision !== revision;
     return {
       get isCancellationRequested() {
-        return owner.revision !== revision;
+        return isCancelled();
       }
     };
   }
@@ -424,7 +424,6 @@ class FlowController implements vscode.Disposable {
     this.decoration?.dispose();
     this.panel?.dispose();
     for (const subscription of this.subscriptions) subscription.dispose();
-    this.phpAdapter.documents.clear();
   }
 }
 
