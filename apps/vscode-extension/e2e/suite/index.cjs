@@ -3,9 +3,9 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const vscode = require('vscode');
+const { runPhp } = require('./php.cjs');
 
 const EXTENSION_ID = 'zephfiro.visual-code-flow';
-
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function retry(assertion, timeoutMs = 10000) {
@@ -27,7 +27,6 @@ async function run() {
   const extension = vscode.extensions.getExtension(EXTENSION_ID);
   assert.ok(extension, 'Extension must be discovered by its VSIX identifier');
   await extension.activate();
-
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'visual-code-flow-e2e-'));
   try {
     const filename = path.join(temp, 'example.ts');
@@ -46,7 +45,6 @@ async function run() {
     const document = await vscode.workspace.openTextDocument(uri);
     const editor = await vscode.window.showTextDocument(document, vscode.ViewColumn.One);
     editor.selection = new vscode.Selection(4, 12, 4, 12);
-
     await vscode.commands.executeCommand('visualCodeFlow.openFlow');
     const inspect = () => vscode.commands.executeCommand('visualCodeFlow.__test.inspect');
     let state;
@@ -59,7 +57,6 @@ async function run() {
     assert.ok(state.graph.nodes.some((node) => node.kind === 'condition'));
     const callNode = state.graph.nodes.find((node) => node.kind === 'call');
     assert.ok(callNode, 'Variable initializer call must be represented as a call node');
-
     await vscode.commands.executeCommand('visualCodeFlow.__test.dispatch', {
       type: 'diagram:copy'
     });
@@ -68,7 +65,6 @@ async function run() {
       assert.match(mermaid, /^flowchart TD/);
       assert.ok(mermaid.includes('helper'), 'Copied diagram contains the call label');
     });
-
     await vscode.commands.executeCommand('visualCodeFlow.__test.dispatch', {
       type: 'node:expand',
       nodeId: callNode.id
@@ -78,7 +74,6 @@ async function run() {
       assert.ok(current.expandedIds.includes(callNode.id), 'Function call expands');
       assert.ok(current.graph.nodes.some((node) => node.parentNodeId === callNode.id));
     });
-
     await vscode.commands.executeCommand('visualCodeFlow.__test.dispatch', {
       type: 'node:collapse',
       nodeId: callNode.id
@@ -87,7 +82,6 @@ async function run() {
       const current = await inspect();
       assert.ok(!current.expandedIds.includes(callNode.id), 'Expanded function collapses');
     });
-
     const root = await inspect();
     const returnNode = root.graph.nodes.find((node) => node.kind === 'return');
     assert.ok(returnNode);
@@ -101,7 +95,6 @@ async function run() {
       assert.equal(active.document.uri.toString(), uri.toString());
       assert.equal(active.selection.start.line, returnNode.source.start.line);
     });
-
     const updated = source.replace(
       'const result = helper(value);',
       'const result = helper(value + 1);'
@@ -117,15 +110,14 @@ async function run() {
       const current = await inspect();
       assert.ok(!current.dirty && current.status.startsWith('Flow updated:'));
     }, 12000);
-
     await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-    // Reopening the flow must not allocate a duplicate panel.
     const reopened = await vscode.window.showTextDocument(document, vscode.ViewColumn.One);
     reopened.selection = new vscode.Selection(4, 15, 4, 15);
     await vscode.commands.executeCommand('visualCodeFlow.openFlow');
     const final = await inspect();
     assert.ok(final.panel);
     assert.ok(final.graph.nodes.length > 0);
+    await runPhp({ retry });
   } finally {
     await fs.rm(temp, { recursive: true, force: true });
   }
