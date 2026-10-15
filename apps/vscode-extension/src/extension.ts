@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { LanguageAdapterRegistry } from '@visual-code-flow/shared';
 import { TypeScriptLanguageAdapter } from '@visual-code-flow/analyzer-typescript';
 import { exportMermaid } from '@visual-code-flow/exporter-mermaid';
 import {
@@ -15,7 +16,7 @@ import { FlowSessionStore } from './session-store.js';
 
 export const OPEN_FLOW_COMMAND = 'visualCodeFlow.openFlow';
 
-const adapter = new TypeScriptLanguageAdapter();
+const adapters = new LanguageAdapterRegistry([new TypeScriptLanguageAdapter()]);
 
 export function activate(context: vscode.ExtensionContext): void {
   let panel: vscode.WebviewPanel | undefined;
@@ -32,7 +33,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const sessionStore = new FlowSessionStore(context.workspaceState);
 
   const refresh = new LiveFlowRefresh(
-    adapter,
+    adapters,
     (graph, symbol) => {
       expansionSession = new FlowExpansionSession(graph, readFlowSettings().maxExpansionDepth);
       currentGraph = expansionSession.getGraph();
@@ -73,9 +74,10 @@ export function activate(context: vscode.ExtensionContext): void {
     sessionStore.invalidate();
     sourceEditorColumn = editor.viewColumn ?? vscode.ViewColumn.One;
     const document = editor.document;
-    if (!adapter.supportedLanguages.includes(document.languageId)) {
+    const adapter = adapters.get(document.languageId);
+    if (!adapter) {
       await vscode.window.showWarningMessage(
-        'Visual Code Flow currently supports TypeScript and JavaScript files.'
+        `Visual Code Flow supports: ${adapters.supportedLanguages.join(', ')}.`
       );
       return;
     }
@@ -177,7 +179,7 @@ export function activate(context: vscode.ExtensionContext): void {
           if (!session || !node?.source || node.kind !== 'call') return;
           void (async () => {
             try {
-              const resolved = await resolveCalledFunction(adapter, node.source!);
+              const resolved = await resolveCalledFunction(adapters, node.source!);
               if (!resolved || expansionSession !== session) {
                 if (expansionSession === session) {
                   void vscode.window.showInformationMessage(
@@ -186,7 +188,10 @@ export function activate(context: vscode.ExtensionContext): void {
                 }
                 return;
               }
-              const analysis = await adapter.analyzeFunction(resolved.request, resolved.symbol);
+              const analysis = await resolved.adapter.analyzeFunction(
+                resolved.request,
+                resolved.symbol
+              );
               if (expansionSession !== session) return;
               const outcome = session.expand(node.id, buildControlFlowGraph(analysis));
               if (!outcome.ok) {
@@ -221,7 +226,7 @@ export function activate(context: vscode.ExtensionContext): void {
           void panel?.webview.postMessage({ type: 'graph', graph: currentGraph });
           void panel?.webview.postMessage({
             type: 'expanded',
-            nodeIds: expansionSession.expandedCalls
+            nodeIds: expansionSession?.expandedCalls ?? []
           });
           return;
         }

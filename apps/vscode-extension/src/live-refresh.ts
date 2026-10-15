@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import { TypeScriptLanguageAdapter } from '@visual-code-flow/analyzer-typescript';
 import {
   AnalysisGeneration,
   buildControlFlowGraph,
@@ -7,7 +6,11 @@ import {
   translateAnchorOffset,
   type FlowGraph
 } from '@visual-code-flow/flow-core';
-import type { AnalysisRequest, FunctionDescriptor } from '@visual-code-flow/shared';
+import type {
+  AnalysisRequest,
+  FunctionDescriptor,
+  LanguageAdapterRegistry
+} from '@visual-code-flow/shared';
 
 interface TrackedRoot {
   readonly uri: string;
@@ -33,7 +36,7 @@ export class LiveFlowRefresh implements vscode.Disposable {
   private debounceMs = 400;
 
   constructor(
-    private readonly adapter: TypeScriptLanguageAdapter,
+    private readonly registry: LanguageAdapterRegistry,
     private readonly publish: (graph: FlowGraph, symbol: FunctionDescriptor) => void,
     private readonly status: (message: string) => void
   ) {}
@@ -58,7 +61,11 @@ export class LiveFlowRefresh implements vscode.Disposable {
       anchorOffset: document.offsetAt(start)
     };
     this.cache.set(
-      { uri: this.root.uri, version: document.version, symbolId: symbol.symbolId },
+      {
+        uri: this.root.uri,
+        version: document.version,
+        symbolId: `${document.languageId}:${symbol.symbolId}`
+      },
       graph
     );
     this.watchGraph(graph);
@@ -109,7 +116,12 @@ export class LiveFlowRefresh implements vscode.Disposable {
       const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(root.uri));
       const request = requestFor(document);
       const position = document.positionAt(Math.min(root.anchorOffset, document.getText().length));
-      const symbol = this.adapter.findFunction(request, {
+      const adapter = this.registry.get(document.languageId);
+      if (!adapter) {
+        this.status('The document language is no longer supported; keeping the last valid flow.');
+        return;
+      }
+      const symbol = adapter.findFunction(request, {
         line: position.line,
         character: position.character
       });
@@ -118,11 +130,15 @@ export class LiveFlowRefresh implements vscode.Disposable {
         this.status('The original function could not be found; keeping the last valid flow.');
         return;
       }
-      const key = { uri: request.uri, version: request.documentVersion, symbolId: symbol.symbolId };
+      const key = {
+        uri: request.uri,
+        version: request.documentVersion,
+        symbolId: `${document.languageId}:${symbol.symbolId}`
+      };
       let graph = this.cache.get(key);
       if (!graph) {
         const isCurrent = (): boolean => this.generation.isCurrent(generation);
-        const analysis = await this.adapter.analyzeFunction(request, symbol, {
+        const analysis = await adapter.analyzeFunction(request, symbol, {
           get isCancellationRequested() {
             return !isCurrent();
           }
